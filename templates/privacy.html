@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Privacy Policy — Spendly{% endblock %}
+
+{% block content %}
+
+<section class="legal-section">
+    <div class="legal-container">
+        <header class="legal-header">
+            <div class="hero-badge">Legal</div>
+            <h1 class="legal-title">Privacy <em>Policy</em></h1>
+            <p class="legal-updated">Last updated: November 2026</p>
+        </header>
+
+        <div class="legal-card">
+            <p>
+                Your privacy matters to us. This Privacy Policy explains what
+                information Spendly collects, how we use it, and the choices you
+                have. By using Spendly, you agree to the practices described here.
+            </p>
+
+            <h2><span class="legal-num">1.</span> Data We Collect</h2>
+            <p>We collect only what we need to run the Service:</p>
+            <ul>
+                <li><strong>Account information</strong> — your name, email address and a securely hashed password.</li>
+                <li><strong>Expense data</strong> — the amounts, categories, dates and descriptions you choose to record.</li>
+                <li><strong>Basic technical data</strong> — such as browser type and access times, used to keep the Service secure and working.</li>
+            </ul>
+            <p>
+                We do not collect bank account details, card numbers or any
+                payment credentials.
+            </p>
+
+            <h2><span class="legal-num">2.</span> How We Use Your Data</h2>
+            <p>Your information is used to:</p>
+            <ul>
+                <li>Create and manage your account.</li>
+                <li>Store your expenses and show you summaries and breakdowns.</li>
+                <li>Keep the Service secure and prevent misuse.</li>
+                <li>Contact you about important changes to the Service or this policy.</li>
+            </ul>
+            <p>
+                We do not sell your personal or financial data, and we do not use
+                it for advertising.
+            </p>
+
+            <h2><span class="legal-num">3.</span> Data Storage</h2>
+            <p>
+                Your data is stored on secured servers and protected using
+                reasonable technical and organisational measures, including
+                password hashing and restricted access. No method of storage or
+                transmission is completely secure, but we work to protect your
+                information.
+            </p>
+            <p>
+                We keep your data for as long as your account is active. You can
+                edit or delete individual expenses at any time, and if you delete
+                your account, your associated data will be removed.
+            </p>
+
+            <h2><span class="legal-num">4.</span> Third Party Services</h2>
+            <p>
+                Spendly may rely on a small number of trusted providers, such as
+                hosting services, to operate. These providers only process data
+                on our behalf and are not permitted to use it for their own
+                purposes.
+            </p>
+            <p>
+                Our pages load fonts from Google Fonts, which may receive basic
+                technical information such as your IP address. We do not share
+                your expense data with any third party unless required by law.
+            </p>
+
+            <h2><span class="legal-num">5.</span> Your Rights</h2>
+            <p>
+                You may access, correct or delete your personal data at any time.
+                You can also ask us for a copy of the data we hold about you.
+            </p>
+
+            <h2><span class="legal-num">6.</span> Contact Us</h2>
+            <p>
+                If you have questions about this Privacy Policy or how your data
+                is handled, please reach out to the Spendly team. We will respond
+                as soon as we can.
+            </p>
+        </div>
+
+        <div class="legal-actions">
+            <a href="{{ url_for('register') }}" class="btn-primary">Start tracking free</a>
+            <a href="{{ url_for('landing') }}" class="btn-ghost">Back to home</a>
+        </div>
+    </div>
+</section>
+
+{% endblock %}
