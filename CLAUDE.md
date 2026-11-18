@@ -18,7 +18,8 @@ spendly/
 ├── static/
 │   ├── css/
 │   │   ├── style.css       # Global styles
-│   │   └── landing.css     # Landing-page-only styles
+│   │   ├── landing.css     # Landing-page-only styles
+│   │   └── profile.css     # Profile-page-only styles
 │   └── js/
 │       └── main.js         # Vanilla JS only
 └── requirements.txt
@@ -93,10 +94,10 @@ pytest -s
 | Route | Status |
 |---|---|
 | `GET /` | Implemented — renders `landing.html` |
-| `GET/POST /register` | Implemented (Step 2) — form + account creation, flashes and redirects to `/login`; signed-in users are redirected to `/` (Step 3) |
-| `GET/POST /login` | Implemented (Step 3) — sign-in form; on success clears the session, sets `session["user_id"]`/`session["user_name"]`, flashes and redirects to `/`; signed-in users are redirected to `/` |
+| `GET/POST /register` | Implemented (Step 2) — form + account creation, flashes and redirects to `/login`; signed-in users are redirected to `/profile` (Step 4) |
+| `GET/POST /login` | Implemented (Step 3) — sign-in form; on success clears the session, sets `session["user_id"]`/`session["user_name"]`, flashes and redirects to `/profile` (Step 4); signed-in users are redirected to `/profile` |
 | `GET /logout` | Implemented (Step 3) — clears the session, flashes and redirects to `/` |
-| `GET /profile` | Stub — Step 4 |
+| `GET /profile` | Implemented (Step 4) — signed-in only (signed-out users are flashed and redirected to `/login`); real user card, placeholder stats/transactions/category breakdown |
 | `GET /expenses/add` | Stub — Step 7 |
 | `GET /expenses/<id>/edit` | Stub — Step 8 |
 | `GET /expenses/<id>/delete` | Stub — Step 9 |
@@ -112,6 +113,6 @@ pytest -s
 - **Never put DB logic in route functions** — it belongs in `database/db.py`
 - **Never install new packages** mid-feature without flagging it — keep `requirements.txt` in sync
 - **Never use JS frameworks** — the frontend is intentionally vanilla
-- **`database/db.py` implements `get_db()`, `init_db()`, `seed_db()`** (Step 1) — `get_db()` returns a new connection per call; the caller must close it. DB file is `expense_tracker.db` in the project root (override with `SPENDLY_DB_PATH`). User helpers: `get_user_by_email()`, `create_user()` (Step 2), `verify_user()` (Step 3)
+- **`database/db.py` implements `get_db()`, `init_db()`, `seed_db()`** (Step 1) — `get_db()` returns a new connection per call; the caller must close it. DB file is `expense_tracker.db` in the project root (override with `SPENDLY_DB_PATH`). User helpers: `get_user_by_email()`, `create_user()` (Step 2), `verify_user()` (Step 3), `get_user_by_id()` (Step 4)
 - **FK enforcement is manual** — SQLite foreign keys are off by default; `get_db()` must run `PRAGMA foreign_keys = ON` on every connection
 - The app runs on **port 5001**, not the Flask default 5000 — don't change this

@@ -1,0 +1,270 @@
+/* ------------------------------------------------------------------ */
+/* Profile page — tokens from style.css only, no hex values            */
+/* ------------------------------------------------------------------ */
+
+/* Layout */
+.profile-page {
+    padding: 3rem 2rem 5rem;
+}
+
+.profile-container {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    display: grid;
+    gap: 1.5rem;
+}
+
+/* Shared card surface */
+.profile-card,
+.stat-card,
+.profile-panel {
+    background: var(--paper-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+}
+
+.profile-panel {
+    padding: 1.5rem;
+    min-width: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* User card                                                           */
+/* ------------------------------------------------------------------ */
+
+.profile-card {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 1.75rem;
+}
+
+.profile-avatar {
+    flex-shrink: 0;
+    width: 4rem;
+    height: 4rem;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--accent-light);
+    color: var(--accent);
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+}
+
+.profile-identity {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.profile-name {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 2rem;
+    line-height: 1.2;
+    color: var(--ink);
+}
+
+.profile-email {
+    color: var(--ink-soft);
+}
+
+.profile-since {
+    margin-top: 0.15rem;
+    font-size: 0.85rem;
+    color: var(--ink-muted);
+}
+
+/* ------------------------------------------------------------------ */
+/* Section headings                                                    */
+/* ------------------------------------------------------------------ */
+
+.profile-heading {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 1.25rem;
+    color: var(--ink);
+    margin-bottom: 1rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* Summary stats                                                       */
+/* ------------------------------------------------------------------ */
+
+.profile-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+}
+
+.stat-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 1.25rem 1.5rem;
+    min-width: 0;
+}
+
+.stat-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-muted);
+}
+
+.stat-value {
+    font-family: var(--font-display);
+    font-size: 1.75rem;
+    line-height: 1.2;
+    color: var(--ink);
+    overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------------ */
+/* Lower grid                                                          */
+/* ------------------------------------------------------------------ */
+
+.profile-grid {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    gap: 1.5rem;
+    align-items: start;
+}
+
+.profile-grid > * {
+    min-width: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Recent transactions table                                           */
+/* ------------------------------------------------------------------ */
+
+.table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.txn-table {
+    width: 100%;
+    min-width: 32rem;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.txn-table th {
+    text-align: left;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-muted);
+    padding: 0 0.5rem 0.65rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.txn-table td {
+    padding: 0.75rem 0.5rem;
+    color: var(--ink-soft);
+    border-bottom: 1px solid var(--border-soft);
+}
+
+.txn-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.txn-table .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.txn-table .nowrap {
+    white-space: nowrap;
+}
+
+.category-pill {
+    display: inline-block;
+    padding: 0.15rem 0.65rem;
+    border-radius: 999px;
+    background: var(--accent-light);
+    color: var(--accent);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+/* ------------------------------------------------------------------ */
+/* Spending by category                                                */
+/* ------------------------------------------------------------------ */
+
+.category-list {
+    list-style: none;
+    display: grid;
+    gap: 1rem;
+}
+
+.category-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.4rem 1rem;
+    font-size: 0.9rem;
+}
+
+.category-name {
+    color: var(--ink);
+    font-weight: 500;
+}
+
+.category-amount {
+    color: var(--ink-soft);
+    font-variant-numeric: tabular-nums;
+}
+
+.category-track {
+    grid-column: 1 / -1;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--paper-warm);
+    overflow: hidden;
+}
+
+.category-bar {
+    height: 100%;
+    border-radius: 999px;
+    background: var(--accent);
+}
+
+/* ------------------------------------------------------------------ */
+/* Empty state                                                         */
+/* ------------------------------------------------------------------ */
+
+.profile-empty {
+    padding: 1.5rem 0;
+    text-align: center;
+    color: var(--ink-muted);
+}
+
+/* ------------------------------------------------------------------ */
+/* Responsive                                                          */
+/* ------------------------------------------------------------------ */
+
+@media (max-width: 768px) {
+    .profile-page {
+        padding: 2rem 1rem 3rem;
+    }
+
+    .profile-stats,
+    .profile-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 480px) {
+    .profile-card {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .profile-name {
+        font-size: 1.6rem;
+    }
+}
