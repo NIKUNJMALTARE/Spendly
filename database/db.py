@@ -2,7 +2,7 @@ import os
 import sqlite3
 from datetime import date
 
-from werkzeug.security import generate_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 
 DB_PATH = os.environ.get(
     "SPENDLY_DB_PATH",
@@ -74,6 +74,22 @@ def get_user_by_email(email):
         ).fetchone()
     finally:
         conn.close()
+
+
+# Checked against when the email is unknown so that the response time
+# matches a wrong-password attempt (avoids leaking which emails exist).
+_DUMMY_PASSWORD_HASH = generate_password_hash("spendly-timing-equaliser")
+
+
+def verify_user(email, password):
+    """Return the users row if the (normalised) email and password match, else None."""
+    user = get_user_by_email(email)
+    if user is None:
+        check_password_hash(_DUMMY_PASSWORD_HASH, password)
+        return None
+    if check_password_hash(user["password_hash"], password):
+        return user
+    return None
 
 
 def create_user(name, email, password):
