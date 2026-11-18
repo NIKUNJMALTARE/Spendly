@@ -63,6 +63,36 @@ def get_db():
     return conn
 
 
+def get_user_by_email(email):
+    """Return the users row for an (already normalised) email, or None."""
+    conn = get_db()
+    try:
+        return conn.execute(
+            "SELECT id, name, email, password_hash, created_at "
+            "FROM users WHERE email = ?",
+            (email,),
+        ).fetchone()
+    finally:
+        conn.close()
+
+
+def create_user(name, email, password):
+    """Insert a user with a hashed password and return the new id.
+
+    Raises sqlite3.IntegrityError if the email is already registered.
+    """
+    conn = get_db()
+    try:
+        with conn:
+            cursor = conn.execute(
+                "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)",
+                (name, email, generate_password_hash(password)),
+            )
+        return cursor.lastrowid
+    finally:
+        conn.close()
+
+
 def init_db():
     """Create all tables if they don't exist. Safe to call repeatedly."""
     conn = get_db()
