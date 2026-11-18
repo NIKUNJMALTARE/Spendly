@@ -113,6 +113,17 @@ a { color: inherit; text-decoration: none; }
 
 .nav-cta:hover { background: var(--accent) !important; }
 
+/* Signed-in nav */
+.nav-user {
+    color: var(--ink);
+    font-weight: 600;
+    max-width: 16ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+/* End signed-in nav */
+
 /* ------------------------------------------------------------------ */
 /* Main                                                                */
 /* ------------------------------------------------------------------ */

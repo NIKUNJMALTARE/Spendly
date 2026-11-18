@@ -1,9 +1,16 @@
 import os
 import sqlite3
 
-from flask import Flask, flash, redirect, render_template, request, url_for
+from flask import Flask, flash, redirect, render_template, request, session, url_for
 
-from database.db import create_user, get_db, get_user_by_email, init_db, seed_db
+from database.db import (
+    create_user,
+    get_db,
+    get_user_by_email,
+    init_db,
+    seed_db,
+    verify_user,
+)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SPENDLY_SECRET_KEY", "dev-only-insecure-key")
@@ -19,6 +26,8 @@ with app.app_context():
 
 DUPLICATE_EMAIL_ERROR = "An account with that email already exists."
 MIN_PASSWORD_LENGTH = 8
+LOGIN_MISSING_FIELDS_ERROR = "Please enter your email and password."
+INVALID_CREDENTIALS_ERROR = "Invalid email or password."
 
 
 def _validate_registration(name, email, password):
@@ -33,6 +42,17 @@ def _validate_registration(name, email, password):
     return None
 
 
+def _validate_login(email, password):
+    """Return an error if a required field is empty, or None.
+
+    No format or length checks — existing accounts (e.g. the seeded demo
+    user) may predate the registration rules.
+    """
+    if not email or not password:
+        return LOGIN_MISSING_FIELDS_ERROR
+    return None
+
+
 # ------------------------------------------------------------------ #
 # Routes                                                              #
 # ------------------------------------------------------------------ #
@@ -44,6 +64,8 @@ def landing():
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
+    if session.get("user_id"):
+        return redirect(url_for("landing"))
     if request.method == "GET":
         return render_template("register.html")
 
@@ -67,9 +89,38 @@ def register():
     return redirect(url_for("login"))
 
 
-@app.route("/login")
+@app.route("/login", methods=["GET", "POST"])
 def login():
-    return render_template("login.html")
+    if session.get("user_id"):
+        return redirect(url_for("landing"))
+    if request.method == "GET":
+        return render_template("login.html")
+
+    email = request.form.get("email", "").strip().lower()
+    password = request.form.get("password", "")  # never strip passwords
+
+    error = _validate_login(email, password)
+    user = None
+    if error is None:
+        user = verify_user(email, password)
+        if user is None:
+            error = INVALID_CREDENTIALS_ERROR
+
+    if error:
+        return render_template("login.html", error=error, email=email)
+
+    session.clear()  # prevent session fixation; must run before flash()
+    session["user_id"] = user["id"]
+    session["user_name"] = user["name"]
+    flash(f"Welcome back, {user['name']}!", "success")
+    return redirect(url_for("landing"))
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    flash("You've been signed out.", "success")  # after clear(), or it is wiped
+    return redirect(url_for("landing"))
 
 
 @app.route("/terms")
@@ -85,11 +136,6 @@ def privacy():
 # ------------------------------------------------------------------ #
 # Placeholder routes — students will implement these                  #
 # ------------------------------------------------------------------ #
-
-@app.route("/logout")
-def logout():
-    return "Logout — coming in Step 3"
-
 
 @app.route("/profile")
 def profile():
