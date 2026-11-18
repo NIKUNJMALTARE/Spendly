@@ -76,6 +76,18 @@ def get_user_by_email(email):
         conn.close()
 
 
+def get_user_by_id(user_id):
+    """Return id, name, email, created_at for a user id, or None. Never the hash."""
+    conn = get_db()
+    try:
+        return conn.execute(
+            "SELECT id, name, email, created_at FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+
+
 # Checked against when the email is unknown so that the response time
 # matches a wrong-password attempt (avoids leaking which emails exist).
 _DUMMY_PASSWORD_HASH = generate_password_hash("spendly-timing-equaliser")

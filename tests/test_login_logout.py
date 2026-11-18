@@ -57,15 +57,15 @@ def test_login_template_uses_url_for():
 # Successful login                                                    #
 # ------------------------------------------------------------------ #
 
-def test_demo_login_redirects_home(client):
+def test_demo_login_redirects_to_profile(client):
     resp = _login(client)
     assert resp.status_code == 302
-    assert urlparse(resp.headers["Location"]).path == "/"
+    assert urlparse(resp.headers["Location"]).path == "/profile"
 
 
 def test_demo_login_shows_welcome(client):
     resp = _login(client, follow_redirects=True)
-    assert resp.request.path == "/"
+    assert resp.request.path == "/profile"
     assert "Welcome back, Demo User!" in _text(resp)
 
 
@@ -240,11 +240,11 @@ def test_claude_md_route_table_updated():
 # ------------------------------------------------------------------ #
 
 @pytest.mark.parametrize("path", ["/login", "/register"])
-def test_signed_in_get_auth_page_redirects_home(client, path):
+def test_signed_in_get_auth_page_redirects_to_profile(client, path):
     _login(client)
     resp = client.get(path)
     assert resp.status_code == 302
-    assert urlparse(resp.headers["Location"]).path == "/"
+    assert urlparse(resp.headers["Location"]).path == "/profile"
 
 
 def test_signed_in_post_login_keeps_session(client):
@@ -252,7 +252,7 @@ def test_signed_in_post_login_keeps_session(client):
     before = _session(client)["user_id"]
     resp = client.post("/login", data={"email": "nobody@example.com", "password": "x"})
     assert resp.status_code == 302
-    assert urlparse(resp.headers["Location"]).path == "/"
+    assert urlparse(resp.headers["Location"]).path == "/profile"
     assert _session(client)["user_id"] == before
 
 
@@ -263,7 +263,7 @@ def test_signed_in_post_register_creates_no_user(client):
         data={"name": "New", "email": "new@example.com", "password": "password123"},
     )
     assert resp.status_code == 302
-    assert urlparse(resp.headers["Location"]).path == "/"
+    assert urlparse(resp.headers["Location"]).path == "/profile"
     assert db_module.get_user_by_email("new@example.com") is None
 
 

@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Profile — Spendly{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/profile.css') }}">
+{% endblock %}
+
+{% block content %}
+{% set name_parts = user.name.split() %}
+{% if name_parts %}
+    {% set initials = (name_parts[0][0] ~ (name_parts[-1][0] if name_parts|length > 1 else ''))|upper %}
+{% else %}
+    {% set initials = '?' %}
+{% endif %}
+{% set member_since = user.created_at|month_year %}
+
+<div class="profile-page">
+    <div class="profile-container">
+
+        <section class="profile-card" aria-labelledby="profile-name">
+            <div class="profile-avatar" aria-hidden="true">{{ initials }}</div>
+            <div class="profile-identity">
+                <h1 id="profile-name" class="profile-name">{{ user.name }}</h1>
+                <p class="profile-email">{{ user.email }}</p>
+                {% if member_since %}
+                <p class="profile-since">Member since {{ member_since }}</p>
+                {% endif %}
+            </div>
+        </section>
+
+        <section class="profile-overview" aria-labelledby="overview-heading">
+            <h2 id="overview-heading" class="profile-heading">This month</h2>
+            <div class="profile-stats">
+                <div class="stat-card">
+                    <span class="stat-label">Total spent</span>
+                    <span class="stat-value">{{ stats.total_spent|inr }}</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">Transactions</span>
+                    <span class="stat-value">{{ stats.transaction_count }}</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">Top category</span>
+                    <span class="stat-value">{{ stats.top_category }}</span>
+                </div>
+            </div>
+        </section>
+
+        <div class="profile-grid">
+            <section class="profile-panel" aria-labelledby="recent-heading">
+                <h2 id="recent-heading" class="profile-heading">Recent transactions</h2>
+                {% if recent_transactions %}
+                <div class="table-scroll">
+                    <table class="txn-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Date</th>
+                                <th scope="col">Description</th>
+                                <th scope="col">Category</th>
+                                <th scope="col" class="num">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for txn in recent_transactions %}
+                            <tr>
+                                <td class="nowrap"><time datetime="{{ txn.date }}">{{ txn.date }}</time></td>
+                                <td>{{ txn.description }}</td>
+                                <td class="nowrap"><span class="category-pill">{{ txn.category }}</span></td>
+                                <td class="num nowrap">{{ txn.amount|inr }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="profile-empty">No transactions yet.</p>
+                {% endif %}
+            </section>
+
+            <section class="profile-panel" aria-labelledby="category-heading">
+                <h2 id="category-heading" class="profile-heading">Spending by category</h2>
+                {% if category_breakdown %}
+                <ul class="category-list">
+                    {% for item in category_breakdown %}
+                    <li class="category-row">
+                        <span class="category-name">{{ item.name }}</span>
+                        <span class="category-amount">{{ item.amount|inr }}</span>
+                        <div class="category-track" role="img" aria-label="{{ item.name }}: {{ item.percent }}%">
+                            <div class="category-bar" style="width: {{ item.percent }}%"></div>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="profile-empty">No spending yet.</p>
+                {% endif %}
+            </section>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

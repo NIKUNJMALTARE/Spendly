@@ -1,5 +1,6 @@
 import os
 import sqlite3
+from datetime import datetime
 
 from flask import Flask, flash, redirect, render_template, request, session, url_for
 
@@ -7,6 +8,7 @@ from database.db import (
     create_user,
     get_db,
     get_user_by_email,
+    get_user_by_id,
     init_db,
     seed_db,
     verify_user,
@@ -28,6 +30,57 @@ DUPLICATE_EMAIL_ERROR = "An account with that email already exists."
 MIN_PASSWORD_LENGTH = 8
 LOGIN_MISSING_FIELDS_ERROR = "Please enter your email and password."
 INVALID_CREDENTIALS_ERROR = "Invalid email or password."
+PROFILE_SIGN_IN_MESSAGE = "Please sign in to view your profile."
+
+# Placeholder profile data (Step 4 — design only). A later step replaces
+# these with real queries against the expenses table.
+PROFILE_CATEGORY_BREAKDOWN = [
+    {"name": "Bills", "amount": 4200.00, "percent": 35},
+    {"name": "Food", "amount": 3000.00, "percent": 25},
+    {"name": "Shopping", "amount": 1800.00, "percent": 15},
+    {"name": "Transport", "amount": 1200.00, "percent": 10},
+    {"name": "Entertainment", "amount": 960.00, "percent": 8},
+    {"name": "Health", "amount": 600.00, "percent": 5},
+    {"name": "Other", "amount": 240.00, "percent": 2},
+]
+
+PROFILE_RECENT_TRANSACTIONS = [
+    {"date": "2026-11-16", "description": "Weekly groceries",
+     "category": "Food", "amount": 1240.00},
+    {"date": "2026-11-14", "description": "Electricity bill",
+     "category": "Bills", "amount": 2850.00},
+    {"date": "2026-11-12", "description": "Metro card top-up",
+     "category": "Transport", "amount": 500.00},
+    {"date": "2026-11-09", "description": "Movie tickets",
+     "category": "Entertainment", "amount": 640.00},
+    {"date": "2026-11-06", "description": "Pharmacy",
+     "category": "Health", "amount": 380.00},
+]
+
+PROFILE_STATS = {
+    "total_spent": sum(c["amount"] for c in PROFILE_CATEGORY_BREAKDOWN),
+    "transaction_count": 18,
+    "top_category": max(
+        PROFILE_CATEGORY_BREAKDOWN, key=lambda c: c["amount"]
+    )["name"],
+}
+
+
+@app.template_filter("month_year")
+def _format_month_year(timestamp):
+    """'2026-11-18 10:00:00' -> 'November 2026'; None if missing or malformed."""
+    if not timestamp:
+        return None
+    try:
+        return datetime.strptime(str(timestamp)[:10], "%Y-%m-%d").strftime("%B %Y")
+    except ValueError:
+        return None
+
+
+@app.template_filter("inr")
+def _format_inr(amount):
+    """1234.5 -> '₹1,234.50'."""
+    return f"₹{amount:,.2f}"
 
 
 def _validate_registration(name, email, password):
@@ -65,7 +118,7 @@ def landing():
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if session.get("user_id"):
-        return redirect(url_for("landing"))
+        return redirect(url_for("profile"))
     if request.method == "GET":
         return render_template("register.html")
 
@@ -92,7 +145,7 @@ def register():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if session.get("user_id"):
-        return redirect(url_for("landing"))
+        return redirect(url_for("profile"))
     if request.method == "GET":
         return render_template("login.html")
 
@@ -113,7 +166,7 @@ def login():
     session["user_id"] = user["id"]
     session["user_name"] = user["name"]
     flash(f"Welcome back, {user['name']}!", "success")
-    return redirect(url_for("landing"))
+    return redirect(url_for("profile"))
 
 
 @app.route("/logout")
@@ -121,6 +174,28 @@ def logout():
     session.clear()
     flash("You've been signed out.", "success")  # after clear(), or it is wiped
     return redirect(url_for("landing"))
+
+
+@app.route("/profile")
+def profile():
+    user_id = session.get("user_id")
+    if not user_id:
+        flash(PROFILE_SIGN_IN_MESSAGE, "error")
+        return redirect(url_for("login"))
+
+    user = get_user_by_id(user_id)
+    if user is None:  # account removed while the session was still live
+        session.clear()
+        flash(PROFILE_SIGN_IN_MESSAGE, "error")  # after clear(), or it is wiped
+        return redirect(url_for("login"))
+
+    return render_template(
+        "profile.html",
+        user=user,
+        stats=PROFILE_STATS,
+        recent_transactions=PROFILE_RECENT_TRANSACTIONS,
+        category_breakdown=PROFILE_CATEGORY_BREAKDOWN,
+    )
 
 
 @app.route("/terms")
@@ -136,11 +211,6 @@ def privacy():
 # ------------------------------------------------------------------ #
 # Placeholder routes — students will implement these                  #
 # ------------------------------------------------------------------ #
-
-@app.route("/profile")
-def profile():
-    return "Profile page — coming in Step 4"
-
 
 @app.route("/expenses/add")
 def add_expense():
