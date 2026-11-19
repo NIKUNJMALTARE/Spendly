@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics — Spendly{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/analytics.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="coming-soon">
+    <div class="coming-soon-card">
+        <img class="coming-soon-accent coming-soon-accent--top"
+             src="{{ url_for('static', filename='img/analytics/corner-accent.svg') }}"
+             width="160" height="160" alt="" aria-hidden="true">
+        <img class="coming-soon-accent coming-soon-accent--bottom"
+             src="{{ url_for('static', filename='img/analytics/corner-accent.svg') }}"
+             width="160" height="160" alt="" aria-hidden="true">
+
+        <div class="coming-soon-tile">
+            <img src="{{ url_for('static', filename='img/analytics/clock-outline.svg') }}"
+                 width="44" height="44" alt="" aria-hidden="true">
+        </div>
+
+        <div class="coming-soon-announcement">
+            <span class="coming-soon-badge">Coming soon</span>
+            <div class="coming-soon-copy">
+                <h1 class="coming-soon-title">Advanced Analytics</h1>
+                <p class="coming-soon-desc">
+                    We're working on powerful insights and visualizations to help
+                    you understand your spending patterns better.
+                </p>
+            </div>
+        </div>
+
+        <div class="coming-soon-status">
+            <img src="{{ url_for('static', filename='img/analytics/progress-dots.svg') }}"
+                 width="52" height="12" alt="" aria-hidden="true">
+            <p class="coming-soon-note">We're crafting something special</p>
+        </div>
+    </div>
+</section>
+{% endblock %}

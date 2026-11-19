@@ -98,6 +98,7 @@ pytest -s
 | `GET/POST /login` | Implemented (Step 3) — sign-in form; on success clears the session, sets `session["user_id"]`/`session["user_name"]`, flashes and redirects to `/profile` (Step 4); signed-in users are redirected to `/profile` |
 | `GET /logout` | Implemented (Step 3) — clears the session, flashes and redirects to `/` |
 | `GET /profile` | Implemented (Step 4 design, Step 5 real data) — signed-in only (signed-out users are flashed and redirected to `/login`); real user card, stats/recent transactions/category breakdown from the user's own expenses; Step 6 date filter via `?start_date=&end_date=` (`YYYY-MM-DD`, inclusive, either optional; presets This month / Last 30 days / All time; invalid or reversed dates fall back to all time with an inline error) |
+| `GET /analytics` | Implemented — signed-in only "Coming Soon" page (`analytics.html` + `analytics.css`, from Figma); signed-out or stale sessions are flashed and redirected to `/login`; navbar link shown only when signed in, highlighted with `is-active` + `aria-current` on this page |
 | `GET /expenses/add` | Stub — Step 7 |
 | `GET /expenses/<id>/edit` | Stub — Step 8 |
 | `GET /expenses/<id>/delete` | Stub — Step 9 |

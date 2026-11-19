@@ -125,6 +125,13 @@ a { color: inherit; text-decoration: none; }
     vertical-align: middle;
 }
 .nav-links .nav-user:hover { color: var(--accent); }
+
+.nav-links a.is-active {
+    color: var(--accent);
+    font-weight: 600;
+    box-shadow: inset 0 -2px 0 var(--accent);
+    padding-bottom: 2px;
+}
 /* End signed-in nav */
 
 /* ------------------------------------------------------------------ */
@@ -678,6 +685,6 @@ a { color: inherit; text-decoration: none; }
 }
 
 @media (max-width: 600px) {
-    .nav-links a:not(.nav-cta):not(.nav-user) { display: none; }
+    .nav-links a:not(.nav-cta):not(.nav-user):not(.nav-link-analytics) { display: none; }
     .hero { padding: 3rem 1rem 2rem; }
 }

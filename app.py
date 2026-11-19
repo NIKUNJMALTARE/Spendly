@@ -34,6 +34,7 @@ MIN_PASSWORD_LENGTH = 8
 LOGIN_MISSING_FIELDS_ERROR = "Please enter your email and password."
 INVALID_CREDENTIALS_ERROR = "Invalid email or password."
 PROFILE_SIGN_IN_MESSAGE = "Please sign in to view your profile."
+ANALYTICS_SIGN_IN_MESSAGE = "Please sign in to view analytics."
 DATE_FORMAT_ERROR = "Please enter valid dates (YYYY-MM-DD)."
 DATE_ORDER_ERROR = "Start date must be on or before end date."
 DATE_INPUT_FORMAT = "%Y-%m-%d"  # what <input type="date"> submits and the DB stores
@@ -239,6 +240,21 @@ def profile():
         filter_error=filter_error,
         presets=_date_presets(start_date, end_date),
     )
+
+
+@app.route("/analytics")
+def analytics():
+    user_id = session.get("user_id")
+    if not user_id:
+        flash(ANALYTICS_SIGN_IN_MESSAGE, "error")
+        return redirect(url_for("login"))
+
+    if get_user_by_id(user_id) is None:  # account removed while the session was still live
+        session.clear()
+        flash(ANALYTICS_SIGN_IN_MESSAGE, "error")  # after clear(), or it is wiped
+        return redirect(url_for("login"))
+
+    return render_template("analytics.html")
 
 
 @app.route("/terms")
