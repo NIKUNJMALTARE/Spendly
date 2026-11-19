@@ -324,7 +324,29 @@
 
 /* Overview caption */
 .overview-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 0.75rem 1rem;
     margin-bottom: 1rem;
+}
+
+.overview-title {
+    min-width: 0;
+}
+
+.profile-add-link {
+    white-space: nowrap;
+}
+
+.profile-empty-link {
+    color: var(--accent);
+    font-weight: 500;
+}
+
+.profile-empty-link:hover {
+    text-decoration: underline;
 }
 
 .overview-head .profile-heading {
@@ -372,6 +394,11 @@
 
     .filter-actions > * {
         flex: 1;
+        text-align: center;
+    }
+
+    .profile-add-link {
+        width: 100%;
         text-align: center;
     }
 }

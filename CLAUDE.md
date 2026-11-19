@@ -19,7 +19,9 @@ spendly/
 │   ├── css/
 │   │   ├── style.css       # Global styles
 │   │   ├── landing.css     # Landing-page-only styles
-│   │   └── profile.css     # Profile-page-only styles
+│   │   ├── profile.css     # Profile-page-only styles
+│   │   ├── analytics.css   # Analytics-page-only styles
+│   │   └── add_expense.css # Add-expense-page-only styles
 │   └── js/
 │       └── main.js         # Vanilla JS only
 └── requirements.txt
@@ -99,7 +101,7 @@ pytest -s
 | `GET /logout` | Implemented (Step 3) — clears the session, flashes and redirects to `/` |
 | `GET /profile` | Implemented (Step 4 design, Step 5 real data) — signed-in only (signed-out users are flashed and redirected to `/login`); real user card, stats/recent transactions/category breakdown from the user's own expenses; Step 6 date filter via `?start_date=&end_date=` (`YYYY-MM-DD`, inclusive, either optional; presets This month / Last 30 days / All time; invalid or reversed dates fall back to all time with an inline error) |
 | `GET /analytics` | Implemented — signed-in only "Coming Soon" page (`analytics.html` + `analytics.css`, from Figma); signed-out or stale sessions are flashed and redirected to `/login`; navbar link shown only when signed in, highlighted with `is-active` + `aria-current` on this page |
-| `GET /expenses/add` | Stub — Step 7 |
+| `GET/POST /expenses/add` | Implemented (Step 7) — signed-in only (signed-out or stale sessions are flashed and redirected to `/login`); form (amount, category, date, optional description) validated by `_validate_expense()`; on success inserts via `create_expense()`, flashes "Expense added." and redirects to `/profile`; invalid input re-renders (200) with an inline error and the submitted values |
 | `GET /expenses/<id>/edit` | Stub — Step 8 |
 | `GET /expenses/<id>/delete` | Stub — Step 9 |
 
@@ -117,6 +119,9 @@ pytest -s
 - **`database/db.py` implements `get_db()`, `init_db()`, `seed_db()`** (Step 1) — `get_db()` returns a new connection per call; the caller must close it. DB file is `expense_tracker.db` in the project root (override with `SPENDLY_DB_PATH`).
   - User helpers: `get_user_by_email()`, `create_user()` (Step 2), `verify_user()` (Step 3), `get_user_by_id()` (Step 4)
   - Expense helpers: `get_expense_stats()`, `get_recent_expenses()`, `get_category_breakdown()` (Step 5)
-  - All three expense helpers take optional `start_date=None, end_date=None` (inclusive ISO bounds, Step 6), built by `_date_range_clause()`
+  - `create_expense()` (Step 7) — parameterised insert, returns the new id; raises `sqlite3.IntegrityError` for an unknown user
+  - All three read helpers take optional `start_date=None, end_date=None` (inclusive ISO bounds, Step 6), built by `_date_range_clause()`
 - **FK enforcement is manual** — SQLite foreign keys are off by default; `get_db()` must run `PRAGMA foreign_keys = ON` on every connection
+- **No CSRF tokens** on POST forms yet — a known gap (would need a new package); partly mitigated by `SESSION_COOKIE_SAMESITE="Lax"`. Request bodies are capped by `MAX_CONTENT_LENGTH` (16 KB → 413)
+- **Signed-in routes use `_require_user(message)`** in `app.py` — returns `(user, None)` or `(None, redirect)`; reuse it rather than re-copying the session checks
 - The app runs on **port 5001**, not the Flask default 5000 — don't change this
