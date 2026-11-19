@@ -6,7 +6,10 @@ from flask import Flask, flash, redirect, render_template, request, session, url
 
 from database.db import (
     create_user,
+    get_category_breakdown,
     get_db,
+    get_expense_stats,
+    get_recent_expenses,
     get_user_by_email,
     get_user_by_id,
     init_db,
@@ -31,40 +34,6 @@ MIN_PASSWORD_LENGTH = 8
 LOGIN_MISSING_FIELDS_ERROR = "Please enter your email and password."
 INVALID_CREDENTIALS_ERROR = "Invalid email or password."
 PROFILE_SIGN_IN_MESSAGE = "Please sign in to view your profile."
-
-# Placeholder profile data (Step 4 — design only). A later step replaces
-# these with real queries against the expenses table.
-PROFILE_CATEGORY_BREAKDOWN = [
-    {"name": "Bills", "amount": 4200.00, "percent": 35},
-    {"name": "Food", "amount": 3000.00, "percent": 25},
-    {"name": "Shopping", "amount": 1800.00, "percent": 15},
-    {"name": "Transport", "amount": 1200.00, "percent": 10},
-    {"name": "Entertainment", "amount": 960.00, "percent": 8},
-    {"name": "Health", "amount": 600.00, "percent": 5},
-    {"name": "Other", "amount": 240.00, "percent": 2},
-]
-
-PROFILE_RECENT_TRANSACTIONS = [
-    {"date": "2026-11-16", "description": "Weekly groceries",
-     "category": "Food", "amount": 1240.00},
-    {"date": "2026-11-14", "description": "Electricity bill",
-     "category": "Bills", "amount": 2850.00},
-    {"date": "2026-11-12", "description": "Metro card top-up",
-     "category": "Transport", "amount": 500.00},
-    {"date": "2026-11-09", "description": "Movie tickets",
-     "category": "Entertainment", "amount": 640.00},
-    {"date": "2026-11-06", "description": "Pharmacy",
-     "category": "Health", "amount": 380.00},
-]
-
-PROFILE_STATS = {
-    "total_spent": sum(c["amount"] for c in PROFILE_CATEGORY_BREAKDOWN),
-    "transaction_count": 18,
-    "top_category": max(
-        PROFILE_CATEGORY_BREAKDOWN, key=lambda c: c["amount"]
-    )["name"],
-}
-
 
 @app.template_filter("month_year")
 def _format_month_year(timestamp):
@@ -192,9 +161,9 @@ def profile():
     return render_template(
         "profile.html",
         user=user,
-        stats=PROFILE_STATS,
-        recent_transactions=PROFILE_RECENT_TRANSACTIONS,
-        category_breakdown=PROFILE_CATEGORY_BREAKDOWN,
+        stats=get_expense_stats(user["id"]),
+        recent_transactions=get_recent_expenses(user["id"]),
+        category_breakdown=get_category_breakdown(user["id"]),
     )
 
 

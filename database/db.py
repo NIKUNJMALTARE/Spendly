@@ -1,6 +1,6 @@
 import os
 import sqlite3
-from datetime import date
+from datetime import date, timedelta
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -42,16 +42,17 @@ CREATE TABLE IF NOT EXISTS expenses (
 );
 """
 
-# (amount, category, day_of_month, description)
+# (amount, category, days_ago, description) — rupee amounts; each date is
+# today minus days_ago, so the demo data never lands in the future.
 SAMPLE_EXPENSES = [
-    (12.50, "Food", 2, "Lunch at cafe"),
-    (45.00, "Transport", 4, "Monthly metro pass"),
-    (120.00, "Bills", 7, "Electricity bill"),
-    (30.25, "Health", 10, "Pharmacy"),
-    (15.99, "Entertainment", 13, "Movie tickets"),
-    (64.80, "Shopping", 17, "Running shoes"),
-    (8.75, "Other", 21, "Gift wrapping"),
-    (38.40, "Food", 25, "Weekly groceries"),
+    (250.00, "Food", 26, "Lunch at cafe"),
+    (600.00, "Transport", 24, "Monthly metro pass"),
+    (1800.00, "Bills", 21, "Electricity bill"),
+    (450.00, "Health", 18, "Pharmacy"),
+    (500.00, "Entertainment", 14, "Movie tickets"),
+    (2200.00, "Shopping", 10, "Running shoes"),
+    (150.00, "Other", 6, "Gift wrapping"),
+    (1400.00, "Food", 2, "Weekly groceries"),
 ]
 
 
@@ -86,6 +87,89 @@ def get_user_by_id(user_id):
         ).fetchone()
     finally:
         conn.close()
+
+
+def get_expense_stats(user_id):
+    """Return total_spent, transaction_count and top_category for a user."""
+    conn = get_db()
+    try:
+        totals = conn.execute(
+            "SELECT COALESCE(SUM(amount), 0) AS total_spent, "
+            "COUNT(*) AS transaction_count "
+            "FROM expenses WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()
+        top = conn.execute(
+            "SELECT category FROM expenses WHERE user_id = ? "
+            "GROUP BY category "
+            "ORDER BY ROUND(SUM(amount), 2) DESC, category ASC "
+            "LIMIT 1",
+            (user_id,),
+        ).fetchone()
+        return {
+            "total_spent": float(totals["total_spent"]),
+            "transaction_count": int(totals["transaction_count"]),
+            "top_category": top["category"] if top else None,
+        }
+    finally:
+        conn.close()
+
+
+def get_recent_expenses(user_id, limit=5):
+    """Return a user's newest expenses (date, then id, descending) as dicts."""
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT date, COALESCE(description, '') AS description, "
+            "category, amount "
+            "FROM expenses WHERE user_id = ? "
+            "ORDER BY date DESC, id DESC "
+            "LIMIT ?",
+            (user_id, limit),
+        ).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def get_category_breakdown(user_id):
+    """Return per-category name, amount and whole percent (summing to 100).
+
+    Percents use the largest-remainder method on integer paise; a user with
+    no spending gets 0 for every entry.
+    """
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT category AS name, SUM(amount) AS amount "
+            "FROM expenses WHERE user_id = ? "
+            "GROUP BY category "
+            "ORDER BY ROUND(SUM(amount), 2) DESC, category ASC",
+            (user_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    paise = [round(row["amount"] * 100) for row in rows]
+    total = sum(paise)
+    if total == 0:
+        percents = [0] * len(rows)
+    else:
+        percents = [p * 100 // total for p in paise]
+        remainders = [p * 100 % total for p in paise]
+        leftover = 100 - sum(percents)
+        by_remainder = sorted(range(len(rows)), key=lambda i: -remainders[i])
+        for i in by_remainder[:leftover]:
+            percents[i] += 1
+
+    return [
+        {
+            "name": row["name"],
+            "amount": round(row["amount"], 2),
+            "percent": percent,
+        }
+        for row, percent in zip(rows, percents)
+    ]
 
 
 # Checked against when the email is unknown so that the response time
@@ -148,8 +232,14 @@ def seed_db():
 
             today = date.today()
             rows = [
-                (user_id, amount, category, today.replace(day=day).isoformat(), description)
-                for amount, category, day, description in SAMPLE_EXPENSES
+                (
+                    user_id,
+                    amount,
+                    category,
+                    (today - timedelta(days=days_ago)).isoformat(),
+                    description,
+                )
+                for amount, category, days_ago, description in SAMPLE_EXPENSES
             ]
             conn.executemany(
                 "INSERT INTO expenses (user_id, amount, category, date, description) "
