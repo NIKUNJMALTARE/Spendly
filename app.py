@@ -1,6 +1,6 @@
 import os
 import sqlite3
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 from flask import Flask, flash, redirect, render_template, request, session, url_for
 
@@ -34,6 +34,10 @@ MIN_PASSWORD_LENGTH = 8
 LOGIN_MISSING_FIELDS_ERROR = "Please enter your email and password."
 INVALID_CREDENTIALS_ERROR = "Invalid email or password."
 PROFILE_SIGN_IN_MESSAGE = "Please sign in to view your profile."
+DATE_FORMAT_ERROR = "Please enter valid dates (YYYY-MM-DD)."
+DATE_ORDER_ERROR = "Start date must be on or before end date."
+DATE_INPUT_FORMAT = "%Y-%m-%d"  # what <input type="date"> submits and the DB stores
+LAST_N_DAYS = 30  # "Last 30 days" preset, counting today
 
 @app.template_filter("month_year")
 def _format_month_year(timestamp):
@@ -44,6 +48,19 @@ def _format_month_year(timestamp):
         return datetime.strptime(str(timestamp)[:10], "%Y-%m-%d").strftime("%B %Y")
     except ValueError:
         return None
+
+
+@app.template_filter("short_date")
+def _format_short_date(value):
+    """'2026-11-01' -> '1 Nov 2026'; None if missing or malformed."""
+    if not value:
+        return None
+    try:
+        parsed = datetime.strptime(str(value)[:10], DATE_INPUT_FORMAT)
+    except ValueError:
+        return None
+    # parsed.day, not "%-d": strftime's no-padding flag isn't portable (fails on Windows).
+    return f"{parsed.day} {parsed.strftime('%b %Y')}"
 
 
 @app.template_filter("inr")
@@ -73,6 +90,56 @@ def _validate_login(email, password):
     if not email or not password:
         return LOGIN_MISSING_FIELDS_ERROR
     return None
+
+
+def _parse_date_filter(args):
+    """Return (start_date, end_date, error) from the query string.
+
+    Bounds are normalised 'YYYY-MM-DD' strings or None. On any error both
+    bounds are dropped so the page falls back to all-time data.
+    """
+    bounds = []
+    for name in ("start_date", "end_date"):
+        raw = (args.get(name) or "").strip()
+        if not raw:
+            bounds.append(None)
+            continue
+        try:
+            bounds.append(datetime.strptime(raw, DATE_INPUT_FORMAT).date())
+        except ValueError:
+            return None, None, DATE_FORMAT_ERROR
+
+    start, end = bounds
+    if start and end and start > end:
+        return None, None, DATE_ORDER_ERROR
+    return (
+        start.isoformat() if start else None,
+        end.isoformat() if end else None,
+        None,
+    )
+
+
+def _date_presets(start_date, end_date, today=None):
+    """Return quick-filter presets as dicts: label, start_date, end_date, active."""
+    today = today or date.today()
+    presets = [
+        ("This month", today.replace(day=1).isoformat(), today.isoformat()),
+        (
+            f"Last {LAST_N_DAYS} days",
+            (today - timedelta(days=LAST_N_DAYS - 1)).isoformat(),
+            today.isoformat(),
+        ),
+        ("All time", None, None),
+    ]
+    return [
+        {
+            "label": label,
+            "start_date": preset_start,
+            "end_date": preset_end,
+            "active": (preset_start, preset_end) == (start_date, end_date),
+        }
+        for label, preset_start, preset_end in presets
+    ]
 
 
 # ------------------------------------------------------------------ #
@@ -158,12 +225,19 @@ def profile():
         flash(PROFILE_SIGN_IN_MESSAGE, "error")  # after clear(), or it is wiped
         return redirect(url_for("login"))
 
+    start_date, end_date, filter_error = _parse_date_filter(request.args)
+    bounds = {"start_date": start_date, "end_date": end_date}
+
     return render_template(
         "profile.html",
         user=user,
-        stats=get_expense_stats(user["id"]),
-        recent_transactions=get_recent_expenses(user["id"]),
-        category_breakdown=get_category_breakdown(user["id"]),
+        stats=get_expense_stats(user["id"], **bounds),
+        recent_transactions=get_recent_expenses(user["id"], **bounds),
+        category_breakdown=get_category_breakdown(user["id"], **bounds),
+        start_date=start_date,
+        end_date=end_date,
+        filter_error=filter_error,
+        presets=_date_presets(start_date, end_date),
     )
 
 

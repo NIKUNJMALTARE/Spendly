@@ -89,22 +89,42 @@ def get_user_by_id(user_id):
         conn.close()
 
 
-def get_expense_stats(user_id):
-    """Return total_spent, transaction_count and top_category for a user."""
+def _date_range_clause(user_id, start_date=None, end_date=None):
+    """Return (where_sql, params) for a user's expenses within optional inclusive bounds.
+
+    Only fixed SQL fragments are concatenated; every value goes through a ? placeholder.
+    """
+    sql = "WHERE user_id = ?"
+    params = [user_id]
+    if start_date is not None:
+        sql += " AND date >= ?"
+        params.append(start_date)
+    if end_date is not None:
+        sql += " AND date <= ?"
+        params.append(end_date)
+    return sql, tuple(params)
+
+
+def get_expense_stats(user_id, start_date=None, end_date=None):
+    """Return total_spent, transaction_count and top_category for a user.
+
+    Optional start_date / end_date ('YYYY-MM-DD') limit the range, inclusive.
+    """
+    where, params = _date_range_clause(user_id, start_date, end_date)
     conn = get_db()
     try:
         totals = conn.execute(
             "SELECT COALESCE(SUM(amount), 0) AS total_spent, "
             "COUNT(*) AS transaction_count "
-            "FROM expenses WHERE user_id = ?",
-            (user_id,),
+            "FROM expenses " + where,
+            params,
         ).fetchone()
         top = conn.execute(
-            "SELECT category FROM expenses WHERE user_id = ? "
+            "SELECT category FROM expenses " + where + " "
             "GROUP BY category "
             "ORDER BY ROUND(SUM(amount), 2) DESC, category ASC "
             "LIMIT 1",
-            (user_id,),
+            params,
         ).fetchone()
         return {
             "total_spent": float(totals["total_spent"]),
@@ -115,37 +135,43 @@ def get_expense_stats(user_id):
         conn.close()
 
 
-def get_recent_expenses(user_id, limit=5):
-    """Return a user's newest expenses (date, then id, descending) as dicts."""
+def get_recent_expenses(user_id, limit=5, start_date=None, end_date=None):
+    """Return a user's newest expenses (date, then id, descending) as dicts.
+
+    Optional start_date / end_date ('YYYY-MM-DD') limit the range, inclusive.
+    """
+    where, params = _date_range_clause(user_id, start_date, end_date)
     conn = get_db()
     try:
         rows = conn.execute(
             "SELECT date, COALESCE(description, '') AS description, "
             "category, amount "
-            "FROM expenses WHERE user_id = ? "
+            "FROM expenses " + where + " "
             "ORDER BY date DESC, id DESC "
             "LIMIT ?",
-            (user_id, limit),
+            params + (limit,),
         ).fetchall()
         return [dict(row) for row in rows]
     finally:
         conn.close()
 
 
-def get_category_breakdown(user_id):
+def get_category_breakdown(user_id, start_date=None, end_date=None):
     """Return per-category name, amount and whole percent (summing to 100).
 
     Percents use the largest-remainder method on integer paise; a user with
-    no spending gets 0 for every entry.
+    no spending gets 0 for every entry. Optional start_date / end_date
+    ('YYYY-MM-DD') limit the range, inclusive.
     """
+    where, params = _date_range_clause(user_id, start_date, end_date)
     conn = get_db()
     try:
         rows = conn.execute(
             "SELECT category AS name, SUM(amount) AS amount "
-            "FROM expenses WHERE user_id = ? "
+            "FROM expenses " + where + " "
             "GROUP BY category "
             "ORDER BY ROUND(SUM(amount), 2) DESC, category ASC",
-            (user_id,),
+            params,
         ).fetchall()
     finally:
         conn.close()
