@@ -30,7 +30,7 @@
         </section>
 
         <section class="profile-overview" aria-labelledby="overview-heading">
-            <h2 id="overview-heading" class="profile-heading">This month</h2>
+            <h2 id="overview-heading" class="profile-heading">Overview</h2>
             <div class="profile-stats">
                 <div class="stat-card">
                     <span class="stat-label">Total spent</span>
@@ -42,7 +42,7 @@
                 </div>
                 <div class="stat-card">
                     <span class="stat-label">Top category</span>
-                    <span class="stat-value">{{ stats.top_category }}</span>
+                    <span class="stat-value">{{ stats.top_category or "—" }}</span>
                 </div>
             </div>
         </section>
@@ -65,7 +65,7 @@
                             {% for txn in recent_transactions %}
                             <tr>
                                 <td class="nowrap"><time datetime="{{ txn.date }}">{{ txn.date }}</time></td>
-                                <td>{{ txn.description }}</td>
+                                <td>{{ txn.description or "—" }}</td>
                                 <td class="nowrap"><span class="category-pill">{{ txn.category }}</span></td>
                                 <td class="num nowrap">{{ txn.amount|inr }}</td>
                             </tr>
