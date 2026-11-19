@@ -231,6 +231,25 @@ def create_user(name, email, password):
         conn.close()
 
 
+def create_expense(user_id, amount, category, expense_date, description=None):
+    """Insert one expense for a user and return the new id.
+
+    expense_date is a normalised 'YYYY-MM-DD' string. Raises
+    sqlite3.IntegrityError if user_id doesn't exist (FKs are on).
+    """
+    conn = get_db()
+    try:
+        with conn:
+            cursor = conn.execute(
+                "INSERT INTO expenses (user_id, amount, category, date, description) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (user_id, amount, category, expense_date, description),
+            )
+        return cursor.lastrowid
+    finally:
+        conn.close()
+
+
 def init_db():
     """Create all tables if they don't exist. Safe to call repeatedly."""
     conn = get_db()

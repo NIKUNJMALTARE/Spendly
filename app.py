@@ -1,10 +1,14 @@
 import os
+import re
 import sqlite3
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 
 from flask import Flask, flash, redirect, render_template, request, session, url_for
 
 from database.db import (
+    CATEGORIES,
+    create_expense,
     create_user,
     get_category_breakdown,
     get_db,
@@ -19,6 +23,10 @@ from database.db import (
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SPENDLY_SECRET_KEY", "dev-only-insecure-key")
+app.config.update(
+    MAX_CONTENT_LENGTH=16 * 1024,  # every form here is tiny; larger bodies get a 413
+    SESSION_COOKIE_SAMESITE="Lax",  # partial CSRF mitigation until real tokens exist
+)
 
 with app.app_context():
     init_db()
@@ -39,6 +47,30 @@ DATE_FORMAT_ERROR = "Please enter valid dates (YYYY-MM-DD)."
 DATE_ORDER_ERROR = "Start date must be on or before end date."
 DATE_INPUT_FORMAT = "%Y-%m-%d"  # what <input type="date"> submits and the DB stores
 LAST_N_DAYS = 30  # "Last 30 days" preset, counting today
+
+ADD_EXPENSE_SIGN_IN_MESSAGE = "Please sign in to add an expense."
+EXPENSE_ADDED_MESSAGE = "Expense added."
+MAX_EXPENSE_AMOUNT = Decimal("1000000")
+MAX_AMOUNT_INPUT_LENGTH = 20  # longer than any valid amount; checked before the regex
+MAX_DESCRIPTION_LENGTH = 200
+MIN_EXPENSE_DATE = date(2000, 1, 1)
+CENTS = Decimal("0.01")
+# Plain decimals only, e.g. "450", "450.5", ".5". Rejects "-5", "1e2", "nan",
+# "inf", "1_000" and non-ASCII digits.
+AMOUNT_RE = re.compile(r"[0-9]+(?:\.[0-9]*)?|\.[0-9]+")
+AMOUNT_REQUIRED_ERROR = "Please enter an amount greater than zero."
+AMOUNT_MAX_ERROR = "Amount must be at most ₹10,00,000."
+AMOUNT_PRECISION_ERROR = "Amount can have at most 2 decimal places."
+CATEGORY_ERROR = "Please choose a valid category."
+EXPENSE_DATE_ERROR = "Please enter a valid date (YYYY-MM-DD)."
+FUTURE_DATE_ERROR = "Date can't be in the future."
+MIN_DATE_ERROR = f"Date must be on or after {MIN_EXPENSE_DATE.year}-01-01."
+DESCRIPTION_LENGTH_ERROR = (
+    f"Description must be at most {MAX_DESCRIPTION_LENGTH} characters."
+)
+DESCRIPTION_CHARS_ERROR = "Description can't contain line breaks or control characters."
+EXPENSE_FIELDS = ("amount", "category", "date", "description")
+
 
 @app.template_filter("month_year")
 def _format_month_year(timestamp):
@@ -91,6 +123,77 @@ def _validate_login(email, password):
     if not email or not password:
         return LOGIN_MISSING_FIELDS_ERROR
     return None
+
+
+def _parse_amount(raw):
+    """Return (Decimal rounded to 2 dp, None), or (None, error)."""
+    if len(raw) > MAX_AMOUNT_INPUT_LENGTH or not AMOUNT_RE.fullmatch(raw):
+        return None, AMOUNT_REQUIRED_ERROR
+    value = Decimal(raw)  # can't raise: the regex only admits plain decimals
+    if value <= 0:
+        return None, AMOUNT_REQUIRED_ERROR
+    if value > MAX_EXPENSE_AMOUNT:  # before quantize, which needs bounded precision
+        return None, AMOUNT_MAX_ERROR
+    if value != value.quantize(CENTS):
+        return None, AMOUNT_PRECISION_ERROR
+    return value.quantize(CENTS), None
+
+
+def _validate_expense(form, today=None):
+    """Return (cleaned, None), or (None, error) for the first invalid field.
+
+    form maps each name in EXPENSE_FIELDS to an already-stripped string.
+    cleaned uses create_expense()'s keyword names: amount (float, 2 dp),
+    category, expense_date ('YYYY-MM-DD') and description (str or None).
+    today is injectable so tests can pin the future-date check.
+    """
+    amount, error = _parse_amount(form["amount"])
+    if error:
+        return None, error
+
+    category = form["category"]
+    if category not in CATEGORIES:
+        return None, CATEGORY_ERROR
+
+    try:
+        parsed = datetime.strptime(form["date"], DATE_INPUT_FORMAT).date()
+    except ValueError:
+        return None, EXPENSE_DATE_ERROR
+    if parsed > (today or date.today()):
+        return None, FUTURE_DATE_ERROR
+    if parsed < MIN_EXPENSE_DATE:
+        return None, MIN_DATE_ERROR
+
+    description = form["description"]
+    if len(description) > MAX_DESCRIPTION_LENGTH:
+        return None, DESCRIPTION_LENGTH_ERROR
+    if not description.isprintable():
+        return None, DESCRIPTION_CHARS_ERROR
+
+    return {
+        "amount": float(amount),
+        "category": category,
+        "expense_date": parsed.isoformat(),
+        "description": description or None,
+    }, None
+
+
+def _require_user(message):
+    """Return (user, None) for the signed-in user, or (None, redirect to /login).
+
+    Covers both a missing session and a stale one whose account was removed.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        flash(message, "error")
+        return None, redirect(url_for("login"))
+
+    user = get_user_by_id(user_id)
+    if user is None:  # account removed while the session was still live
+        session.clear()
+        flash(message, "error")  # after clear(), or it is wiped
+        return None, redirect(url_for("login"))
+    return user, None
 
 
 def _parse_date_filter(args):
@@ -215,16 +318,9 @@ def logout():
 
 @app.route("/profile")
 def profile():
-    user_id = session.get("user_id")
-    if not user_id:
-        flash(PROFILE_SIGN_IN_MESSAGE, "error")
-        return redirect(url_for("login"))
-
-    user = get_user_by_id(user_id)
-    if user is None:  # account removed while the session was still live
-        session.clear()
-        flash(PROFILE_SIGN_IN_MESSAGE, "error")  # after clear(), or it is wiped
-        return redirect(url_for("login"))
+    user, login_redirect = _require_user(PROFILE_SIGN_IN_MESSAGE)
+    if login_redirect:
+        return login_redirect
 
     start_date, end_date, filter_error = _parse_date_filter(request.args)
     bounds = {"start_date": start_date, "end_date": end_date}
@@ -244,17 +340,45 @@ def profile():
 
 @app.route("/analytics")
 def analytics():
-    user_id = session.get("user_id")
-    if not user_id:
-        flash(ANALYTICS_SIGN_IN_MESSAGE, "error")
-        return redirect(url_for("login"))
-
-    if get_user_by_id(user_id) is None:  # account removed while the session was still live
-        session.clear()
-        flash(ANALYTICS_SIGN_IN_MESSAGE, "error")  # after clear(), or it is wiped
-        return redirect(url_for("login"))
+    _, login_redirect = _require_user(ANALYTICS_SIGN_IN_MESSAGE)
+    if login_redirect:
+        return login_redirect
 
     return render_template("analytics.html")
+
+
+@app.route("/expenses/add", methods=["GET", "POST"])
+def add_expense():
+    user, login_redirect = _require_user(ADD_EXPENSE_SIGN_IN_MESSAGE)
+    if login_redirect:
+        return login_redirect
+
+    today = date.today().isoformat()
+    template_args = {
+        "categories": CATEGORIES,
+        "today": today,
+        "max_description_length": MAX_DESCRIPTION_LENGTH,
+    }
+    if request.method == "GET":
+        form = {"amount": "", "category": "", "date": today, "description": ""}
+        return render_template("add_expense.html", form=form, **template_args)
+
+    form = {field: request.form.get(field, "").strip() for field in EXPENSE_FIELDS}
+    cleaned, error = _validate_expense(form)
+    if error:
+        return render_template(
+            "add_expense.html", form=form, error=error, **template_args
+        )
+
+    create_expense(  # user id from the session only; any form user_id is ignored
+        user["id"],
+        amount=cleaned["amount"],
+        category=cleaned["category"],
+        expense_date=cleaned["expense_date"],
+        description=cleaned["description"],
+    )
+    flash(EXPENSE_ADDED_MESSAGE, "success")
+    return redirect(url_for("profile"))
 
 
 @app.route("/terms")
@@ -270,11 +394,6 @@ def privacy():
 # ------------------------------------------------------------------ #
 # Placeholder routes — students will implement these                  #
 # ------------------------------------------------------------------ #
-
-@app.route("/expenses/add")
-def add_expense():
-    return "Add expense — coming in Step 7"
-
 
 @app.route("/expenses/<int:id>/edit")
 def edit_expense(id):

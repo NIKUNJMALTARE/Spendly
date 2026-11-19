@@ -59,18 +59,21 @@
 
         <section class="profile-overview" aria-labelledby="overview-heading">
             <div class="overview-head">
-                <h2 id="overview-heading" class="profile-heading">Overview</h2>
-                <p class="profile-range">
-                    {%- if start_date and end_date -%}
-                        {{ start_date|short_date }} – {{ end_date|short_date }}
-                    {%- elif start_date -%}
-                        From {{ start_date|short_date }}
-                    {%- elif end_date -%}
-                        Until {{ end_date|short_date }}
-                    {%- else -%}
-                        All time
-                    {%- endif -%}
-                </p>
+                <div class="overview-title">
+                    <h2 id="overview-heading" class="profile-heading">Overview</h2>
+                    <p class="profile-range">
+                        {%- if start_date and end_date -%}
+                            {{ start_date|short_date }} – {{ end_date|short_date }}
+                        {%- elif start_date -%}
+                            From {{ start_date|short_date }}
+                        {%- elif end_date -%}
+                            Until {{ end_date|short_date }}
+                        {%- else -%}
+                            All time
+                        {%- endif -%}
+                    </p>
+                </div>
+                <a href="{{ url_for('add_expense') }}" class="btn-primary profile-add-link">Add expense</a>
             </div>
             <div class="profile-stats">
                 <div class="stat-card">
@@ -115,7 +118,11 @@
                     </table>
                 </div>
                 {% else %}
-                <p class="profile-empty">{{ "No transactions in this period." if filter_active else "No transactions yet." }}</p>
+                {% if filter_active %}
+                <p class="profile-empty">No transactions in this period.</p>
+                {% else %}
+                <p class="profile-empty">No transactions yet. <a href="{{ url_for('add_expense') }}" class="profile-empty-link">Add your first expense</a></p>
+                {% endif %}
                 {% endif %}
             </section>
 

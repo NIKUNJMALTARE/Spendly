@@ -1,0 +1,101 @@
+/* ------------------------------------------------------------------ */
+/* Add expense page — tokens from style.css only, no hex values        */
+/* ------------------------------------------------------------------ */
+
+.expense-section {
+    align-items: flex-start;
+}
+
+/* Amount with a ₹ prefix */
+.amount-field {
+    position: relative;
+}
+
+.amount-prefix {
+    position: absolute;
+    left: 0.875rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--ink-muted);
+    font-size: 0.95rem;
+    pointer-events: none;
+}
+
+.amount-input {
+    padding-left: 2rem;
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+.amount-input::-webkit-inner-spin-button,
+.amount-input::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* Category select with a CSS-only chevron */
+.form-select {
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
+    padding-right: 2.5rem;
+    background-color: var(--paper);
+    background-image:
+        linear-gradient(45deg, transparent 50%, var(--ink-muted) 50%),
+        linear-gradient(135deg, var(--ink-muted) 50%, transparent 50%);
+    background-position:
+        calc(100% - 1.2rem) 50%,
+        calc(100% - 0.85rem) 50%;
+    background-size: 0.35rem 0.35rem;
+    background-repeat: no-repeat;
+}
+
+.form-select:invalid {
+    color: var(--ink-faint);
+}
+
+.form-select option {
+    color: var(--ink);
+}
+
+.form-optional {
+    font-weight: 400;
+    color: var(--ink-muted);
+}
+
+/* Submit + cancel */
+.form-actions {
+    display: flex;
+    align-items: stretch;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.form-actions .btn-submit {
+    flex: 1;
+    width: auto;
+    margin-top: 0;
+}
+
+.form-actions .btn-ghost {
+    font-family: var(--font-body);
+    text-align: center;
+}
+
+/* ------------------------------------------------------------------ */
+/* Responsive                                                          */
+/* ------------------------------------------------------------------ */
+
+@media (max-width: 480px) {
+    .expense-section {
+        padding: 2rem 1rem;
+    }
+
+    .expense-card {
+        padding: 1.5rem 1.25rem;
+    }
+
+    .form-actions {
+        flex-direction: column;
+    }
+}
