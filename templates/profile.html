@@ -14,6 +14,7 @@
     {% set initials = '?' %}
 {% endif %}
 {% set member_since = user.created_at|month_year %}
+{% set filter_active = start_date or end_date %}
 
 <div class="profile-page">
     <div class="profile-container">
@@ -29,8 +30,48 @@
             </div>
         </section>
 
+        <section class="profile-filter" aria-label="Filter by date">
+            <form class="filter-form" method="get" action="{{ url_for('profile') }}">
+                <div class="filter-field">
+                    <label for="filter-start">From</label>
+                    <input class="form-input" type="date" id="filter-start" name="start_date" value="{{ start_date or '' }}">
+                </div>
+                <div class="filter-field">
+                    <label for="filter-end">To</label>
+                    <input class="form-input" type="date" id="filter-end" name="end_date" value="{{ end_date or '' }}">
+                </div>
+                <div class="filter-actions">
+                    <button type="submit" class="btn-primary">Apply</button>
+                    <a class="btn-ghost" href="{{ url_for('profile') }}">Clear</a>
+                </div>
+            </form>
+            <nav class="filter-presets" aria-label="Quick ranges">
+                {% for preset in presets %}
+                <a class="filter-preset{% if preset.active %} is-active{% endif %}"
+                   href="{{ url_for('profile', start_date=preset.start_date, end_date=preset.end_date) }}"
+                   {%- if preset.active %} aria-current="true"{% endif %}>{{ preset.label }}</a>
+                {% endfor %}
+            </nav>
+            {% if filter_error %}
+            <p class="filter-error" role="alert">{{ filter_error }}</p>
+            {% endif %}
+        </section>
+
         <section class="profile-overview" aria-labelledby="overview-heading">
-            <h2 id="overview-heading" class="profile-heading">Overview</h2>
+            <div class="overview-head">
+                <h2 id="overview-heading" class="profile-heading">Overview</h2>
+                <p class="profile-range">
+                    {%- if start_date and end_date -%}
+                        {{ start_date|short_date }} – {{ end_date|short_date }}
+                    {%- elif start_date -%}
+                        From {{ start_date|short_date }}
+                    {%- elif end_date -%}
+                        Until {{ end_date|short_date }}
+                    {%- else -%}
+                        All time
+                    {%- endif -%}
+                </p>
+            </div>
             <div class="profile-stats">
                 <div class="stat-card">
                     <span class="stat-label">Total spent</span>
@@ -74,7 +115,7 @@
                     </table>
                 </div>
                 {% else %}
-                <p class="profile-empty">No transactions yet.</p>
+                <p class="profile-empty">{{ "No transactions in this period." if filter_active else "No transactions yet." }}</p>
                 {% endif %}
             </section>
 
@@ -93,7 +134,7 @@
                     {% endfor %}
                 </ul>
                 {% else %}
-                <p class="profile-empty">No spending yet.</p>
+                <p class="profile-empty">{{ "No spending in this period." if filter_active else "No spending yet." }}</p>
                 {% endif %}
             </section>
         </div>

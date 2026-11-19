@@ -1,10 +1,13 @@
 """Tests for the profile page: Step 4 design and Step 5 real expense data."""
 
 import html
+from html.parser import HTMLParser
 import re
 from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
+
+import pytest
 
 import app as app_module
 import database.db as db_module
@@ -217,7 +220,8 @@ def test_overview_heading(client):
     _login(client)
     body = _text(client.get("/profile"))
     assert re.search(r'id="overview-heading"[^>]*>\s*Overview\s*<', body)
-    assert "This month" not in body
+    # Unfiltered, the caption under the heading describes the whole history.
+    assert re.search(r'class="profile-range">\s*All time\s*<', body)
 
 
 def test_transactions_table(client):
@@ -378,3 +382,410 @@ def test_login_lands_on_profile(client):
     body = _text(resp)
     assert "Welcome back, Demo User!" in body
     assert _card_name(body) == "Demo User"
+
+
+# ------------------------------------------------------------------ #
+# Step 6: date filter                                                 #
+# ------------------------------------------------------------------ #
+
+FORMAT_ERROR = "Please enter valid dates (YYYY-MM-DD)."
+ORDER_ERROR = "Start date must be on or before end date."
+EN_DASH = "–"
+
+
+def _filter_user(client):
+    """Register a user with fixed March/April 2026 expenses and sign in."""
+    email = "filter@example.com"
+    _register_and_login(client, "Filter User", email)
+    user_id = db_module.get_user_by_email(email)["id"]
+    _add_expense(user_id, 100, "Food", "2026-03-01", "Mar first")
+    _add_expense(user_id, 250, "Bills", "2026-03-15", "Mar mid")
+    _add_expense(user_id, 200, "Food", "2026-03-31", "Mar last")
+    _add_expense(user_id, 400, "Health", "2026-04-01", "Apr first")
+    return user_id
+
+
+def _get(client, **params):
+    return client.get("/profile", query_string=params)
+
+
+def _caption(body):
+    match = re.search(r'class="profile-range">\s*(.*?)\s*</p>', body, re.S)
+    assert match, "range caption not rendered"
+    return match.group(1)
+
+
+def _stat(body, label):
+    match = re.search(
+        r'stat-label">' + re.escape(label) + r'</span>\s*<span[^>]*class="stat-value"[^>]*>(.*?)</span>',
+        body,
+        re.S,
+    )
+    assert match, f"stat {label} not rendered"
+    return match.group(1).strip()
+
+
+class _TagCollector(HTMLParser):
+    """Collect <form>, <input> and <a> tags as attr dicts, independent of attribute order."""
+
+    def __init__(self):
+        super().__init__()
+        self.forms, self.inputs, self.links = [], [], []
+        self._link = None
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == "form":
+            self.forms.append(attrs)
+        elif tag == "input":
+            self.inputs.append(attrs)
+        elif tag == "a":
+            self._link = {"attrs": attrs, "text": ""}
+
+    def handle_data(self, data):
+        if self._link is not None:
+            self._link["text"] += data
+
+    def handle_endtag(self, tag):
+        if tag == "a" and self._link is not None:
+            self._link["text"] = self._link["text"].strip()
+            self.links.append(self._link)
+            self._link = None
+
+
+def _tags(body):
+    collector = _TagCollector()
+    collector.feed(body)
+    return collector
+
+
+def _classes(attrs):
+    return (attrs.get("class") or "").split()
+
+
+def _input_values(body):
+    return {
+        attrs["name"]: attrs.get("value") or ""
+        for attrs in _tags(body).inputs
+        if attrs.get("name") in ("start_date", "end_date")
+    }
+
+
+def _preset_links(body):
+    return [link for link in _tags(body).links if "filter-preset" in _classes(link["attrs"])]
+
+
+def _active_presets(body):
+    return [
+        link["text"]
+        for link in _preset_links(body)
+        if "is-active" in _classes(link["attrs"]) and link["attrs"].get("aria-current") == "true"
+    ]
+
+
+def _alert(body):
+    match = re.search(r'<[^>]*role="alert"[^>]*>\s*(.*?)\s*<', body, re.S)
+    return match.group(1) if match else None
+
+
+def _assert_demo_all_time(body):
+    assert _stat(body, "Total spent") == "₹7,350.00"
+    assert _stat(body, "Transactions") == "8"
+    assert _stat(body, "Top category") == "Shopping"
+    assert _descriptions(_tbody(body)) == RECENT_FIVE
+    assert _caption(body) == "All time"
+
+
+class TestParseDateFilter:
+    def test_empty_args(self):
+        assert app_module._parse_date_filter({}) == (None, None, None)
+
+    def test_blank_and_whitespace_values_are_none(self):
+        args = {"start_date": "", "end_date": "   "}
+        assert app_module._parse_date_filter(args) == (None, None, None)
+
+    def test_valid_range(self):
+        args = {"start_date": "2026-03-01", "end_date": "2026-03-31"}
+        assert app_module._parse_date_filter(args) == ("2026-03-01", "2026-03-31", None)
+
+    def test_only_start_and_only_end(self):
+        assert app_module._parse_date_filter({"start_date": "2026-03-01"}) == (
+            "2026-03-01", None, None)
+        assert app_module._parse_date_filter({"end_date": "2026-03-31"}) == (
+            None, "2026-03-31", None)
+
+    def test_whitespace_is_stripped(self):
+        args = {"start_date": " 2026-03-01 ", "end_date": "\t2026-03-02"}
+        assert app_module._parse_date_filter(args) == ("2026-03-01", "2026-03-02", None)
+
+    def test_value_is_normalised(self):
+        assert app_module._parse_date_filter({"start_date": "2026-1-5"}) == (
+            "2026-01-05", None, None)
+
+    def test_equal_bounds_allowed(self):
+        args = {"start_date": "2026-03-01", "end_date": "2026-03-01"}
+        assert app_module._parse_date_filter(args) == ("2026-03-01", "2026-03-01", None)
+
+    @pytest.mark.parametrize("bad", ["2026-02-30", "abc", "19/11/2026", "2026-13-01"])
+    def test_invalid_value_gives_format_error_and_drops_both_bounds(self, bad):
+        args = {"start_date": bad, "end_date": "2026-03-01"}
+        assert app_module._parse_date_filter(args) == (None, None, FORMAT_ERROR)
+        args = {"start_date": "2026-03-01", "end_date": bad}
+        assert app_module._parse_date_filter(args) == (None, None, FORMAT_ERROR)
+
+    def test_reversed_range_gives_order_error(self):
+        args = {"start_date": "2026-03-31", "end_date": "2026-03-01"}
+        assert app_module._parse_date_filter(args) == (None, None, ORDER_ERROR)
+
+    def test_unknown_params_ignored(self):
+        assert app_module._parse_date_filter({"foo": "bar"}) == (None, None, None)
+
+
+class TestDatePresets:
+    TODAY = date(2026, 3, 31)
+
+    def _by_label(self, start, end, today=None):
+        presets = app_module._date_presets(start, end, today=today or self.TODAY)
+        return {p["label"]: p for p in presets}
+
+    def test_labels_order_and_bounds(self):
+        presets = app_module._date_presets(None, None, today=self.TODAY)
+        assert [p["label"] for p in presets] == ["This month", "Last 30 days", "All time"]
+        by = {p["label"]: p for p in presets}
+        assert (by["This month"]["start_date"], by["This month"]["end_date"]) == (
+            "2026-03-01", "2026-03-31")
+        assert (by["Last 30 days"]["start_date"], by["Last 30 days"]["end_date"]) == (
+            "2026-03-02", "2026-03-31")
+        assert (by["All time"]["start_date"], by["All time"]["end_date"]) == (None, None)
+
+    def test_all_time_active_without_filter(self):
+        by = self._by_label(None, None)
+        assert by["All time"]["active"] is True
+        assert by["This month"]["active"] is False
+        assert by["Last 30 days"]["active"] is False
+
+    def test_this_month_active(self):
+        by = self._by_label("2026-03-01", "2026-03-31")
+        assert by["This month"]["active"] is True
+        assert by["All time"]["active"] is False
+
+    def test_last_30_days_active(self):
+        by = self._by_label("2026-03-02", "2026-03-31")
+        assert by["Last 30 days"]["active"] is True
+        assert by["This month"]["active"] is False
+
+    def test_active_requires_exact_match_on_both_bounds(self):
+        by = self._by_label("2026-03-01", None)
+        assert not any(p["active"] for p in by.values())
+        by = self._by_label("2026-03-02", "2026-03-30")
+        assert not any(p["active"] for p in by.values())
+
+    def test_both_can_be_active_on_the_30th(self):
+        by = self._by_label("2026-04-01", "2026-04-30", today=date(2026, 4, 30))
+        assert by["This month"]["active"] is True
+        assert by["Last 30 days"]["active"] is True
+
+
+class TestShortDateFilter:
+    def _filter(self):
+        return app_module.app.jinja_env.filters["short_date"]
+
+    def test_formats_date(self):
+        assert self._filter()("2026-11-01") == "1 Nov 2026"
+        assert self._filter()("2026-03-31") == "31 Mar 2026"
+
+    def test_none_and_garbage_give_none(self):
+        assert self._filter()(None) is None
+        assert self._filter()("garbage") is None
+
+
+class TestProfileDateFilterRoute:
+    @pytest.mark.parametrize(
+        "params", [{}, {"start_date": "", "end_date": ""}], ids=["no-params", "blank-submit"]
+    )
+    def test_no_filter_shows_all_time(self, client, params):
+        _login(client)
+        resp = _get(client, **params)
+        assert resp.status_code == 200
+        body = _text(resp)
+        _assert_demo_all_time(body)
+        assert _active_presets(body) == ["All time"]
+        assert _input_values(body) == {"start_date": "", "end_date": ""}
+        assert _alert(body) is None
+
+    def test_filter_form_structure(self, client):
+        _login(client)
+        body = _text(_get(client))
+        tags = _tags(body)
+        form = next(f for f in tags.forms if "filter-form" in _classes(f))
+        assert form.get("method") == "get"
+        assert form.get("action") == "/profile"
+        dates = {i["name"]: i.get("type") for i in tags.inputs if i.get("type") == "date"}
+        assert dates == {"start_date": "date", "end_date": "date"}
+        assert "Apply" in body
+
+    def test_clear_link_points_to_bare_profile(self, client):
+        _login(client)
+        body = _text(_get(client, start_date="2026-03-01", end_date="2026-03-31"))
+        clear = [link for link in _tags(body).links if link["text"] == "Clear"]
+        assert [link["attrs"].get("href") for link in clear] == ["/profile"]
+
+    def test_inclusive_range_filters_stats_table_and_breakdown(self, client):
+        _filter_user(client)
+        resp = _get(client, start_date="2026-03-01", end_date="2026-03-31")
+        assert resp.status_code == 200
+        body = _text(resp)
+        assert _stat(body, "Total spent") == "₹550.00"
+        assert _stat(body, "Transactions") == "3"
+        assert _stat(body, "Top category") == "Food"
+        assert _descriptions(_tbody(body)) == ["Mar last", "Mar mid", "Mar first"]
+        assert "Apr first" not in body
+        assert 'aria-label="Food: ' in body
+        assert 'aria-label="Bills: ' in body
+        assert 'aria-label="Health: ' not in body
+        percents = [int(p) for p in re.findall(r'aria-label="[^"]*: (\d+)%"', body)]
+        assert sum(percents) == 100
+
+    def test_single_day_range_includes_that_day(self, client):
+        _filter_user(client)
+        body = _text(_get(client, start_date="2026-03-15", end_date="2026-03-15"))
+        assert _stat(body, "Transactions") == "1"
+        assert _descriptions(_tbody(body)) == ["Mar mid"]
+
+    def test_caption_both_bounds(self, client):
+        _filter_user(client)
+        body = _text(_get(client, start_date="2026-03-01", end_date="2026-03-31"))
+        assert _caption(body) == f"1 Mar 2026 {EN_DASH} 31 Mar 2026"
+
+    def test_start_only_is_from_caption_and_open_ended(self, client):
+        _filter_user(client)
+        body = _text(_get(client, start_date="2026-03-15"))
+        assert _caption(body) == "From 15 Mar 2026"
+        assert _stat(body, "Transactions") == "3"
+        assert _descriptions(_tbody(body)) == ["Apr first", "Mar last", "Mar mid"]
+
+    def test_end_only_is_until_caption_and_open_ended(self, client):
+        _filter_user(client)
+        body = _text(_get(client, end_date="2026-03-15"))
+        assert _caption(body) == "Until 15 Mar 2026"
+        assert _stat(body, "Transactions") == "2"
+        assert _descriptions(_tbody(body)) == ["Mar mid", "Mar first"]
+
+    def test_inputs_prefilled_with_applied_bounds(self, client):
+        _filter_user(client)
+        body = _text(_get(client, start_date="2026-03-01", end_date="2026-03-31"))
+        assert _input_values(body) == {
+            "start_date": "2026-03-01",
+            "end_date": "2026-03-31",
+        }
+
+    def test_inputs_prefilled_with_normalised_values(self, client):
+        _filter_user(client)
+        body = _text(_get(client, start_date=" 2026-3-1 "))
+        assert _input_values(body)["start_date"] == "2026-03-01"
+        assert _input_values(body)["end_date"] == ""
+
+    def test_unknown_params_ignored(self, client):
+        _login(client)
+        body = _text(_get(client, foo="bar"))
+        _assert_demo_all_time(body)
+
+    def test_each_preset_link_activates_itself(self, client):
+        _login(client)
+        links = _preset_links(_text(_get(client)))
+        assert [link["text"] for link in links] == ["This month", "Last 30 days", "All time"]
+        assert links[-1]["attrs"]["href"] == "/profile"
+        for link in links:
+            body = _text(client.get(link["attrs"]["href"]))
+            assert link["text"] in _active_presets(body)
+            assert _alert(body) is None
+
+    def test_non_matching_range_marks_no_preset_active(self, client):
+        _filter_user(client)
+        body = _text(_get(client, start_date="2026-03-01", end_date="2026-03-31"))
+        assert _active_presets(body) == []
+
+    @pytest.mark.parametrize("bad", ["2026-02-30", "abc", "19/11/2026"])
+    def test_invalid_date_falls_back_to_all_time_with_alert(self, client, bad):
+        _login(client)
+        resp = _get(client, start_date=bad, end_date="2026-12-31")
+        assert resp.status_code == 200
+        body = _text(resp)
+        assert _alert(body) == FORMAT_ERROR
+        _assert_demo_all_time(body)
+
+    def test_reversed_range_falls_back_with_alert(self, client):
+        _login(client)
+        resp = _get(client, start_date="2026-03-31", end_date="2026-03-01")
+        assert resp.status_code == 200
+        body = _text(resp)
+        assert _alert(body) == ORDER_ERROR
+        _assert_demo_all_time(body)
+        assert _input_values(body) == {"start_date": "", "end_date": ""}
+
+    def test_sql_injection_value_is_invalid_and_not_echoed(self, client):
+        _login(client)
+        evil = "2026-01-01' OR '1'='1"
+        resp = _get(client, start_date=evil)
+        assert resp.status_code == 200
+        body = _text(resp)
+        assert _alert(body) == FORMAT_ERROR
+        _assert_demo_all_time(body)
+        assert _input_values(body) == {"start_date": "", "end_date": ""}
+        raw = resp.get_data(as_text=True)
+        assert "OR '1'" not in raw and "OR &#39;1" not in raw
+
+    def test_no_error_shown_for_valid_filter(self, client):
+        _filter_user(client)
+        body = _text(_get(client, start_date="2026-03-01", end_date="2026-03-31"))
+        assert _alert(body) is None
+
+    def test_empty_period_shows_zero_state(self, client):
+        _login(client)
+        body = _text(_get(client, start_date="2000-01-01", end_date="2000-01-31"))
+        assert _stat(body, "Total spent") == "₹0.00"
+        assert _stat(body, "Transactions") == "0"
+        assert _stat(body, "Top category") == "—"
+        assert "No transactions in this period." in body
+        assert "No spending in this period." in body
+        assert "No transactions yet." not in body
+        assert "No spending yet." not in body
+        assert "<tbody>" not in body
+
+    def test_unfiltered_empty_user_keeps_step5_wording(self, client):
+        _register_and_login(client, "Nobody", "nobody@example.com")
+        body = _text(_get(client))
+        assert "No transactions yet." in body
+        assert "No spending yet." in body
+        assert "in this period" not in body
+
+    def test_filtered_view_never_shows_other_users_expenses(self, client):
+        other = db_module.create_user("Other Person", "other@example.com", "password123")
+        _add_expense(other, 9999, "Health", "2026-03-05", "Other secret")
+        _filter_user(client)
+        body = _text(_get(client, start_date="2026-03-01", end_date="2026-03-31"))
+        assert "Other secret" not in body
+        assert "9,999" not in body
+        assert _stat(body, "Total spent") == "₹550.00"
+
+    def test_signed_out_with_query_string_redirects_to_login(self, client):
+        resp = _get(client, start_date="2026-03-01", end_date="2026-03-31")
+        assert resp.status_code == 302
+        assert urlparse(resp.headers["Location"]).path == "/login"
+
+    def test_signed_out_with_invalid_query_still_redirects(self, client):
+        resp = _get(client, start_date="abc")
+        assert resp.status_code == 302
+        assert urlparse(resp.headers["Location"]).path == "/login"
+
+
+class TestDateFilterAssets:
+    def test_css_has_filter_rules(self):
+        css = CSS_PATH.read_text()
+        for selector in (".filter-form", ".filter-preset.is-active", ".filter-error"):
+            assert selector in css
+
+    def test_claude_md_documents_date_filter(self):
+        text = (PROJECT_ROOT / "CLAUDE.md").read_text()
+        row = next(line for line in text.splitlines() if line.startswith("| `GET /profile`"))
+        assert "start_date" in row and "end_date" in row
