@@ -1,23 +1,33 @@
 """Tests for Step 7: adding an expense at /expenses/add."""
 
-import html
 import re
 import sqlite3
 from datetime import date, timedelta
-from pathlib import Path
 
 import pytest
 
 import app as app_module
 import database.db as db_module
+from tests.helpers import (
+    PROJECT_ROOT,
+    DEMO,
+    HEX_RE,
+    today_iso,
+    login,
+    register_and_login,
+    page_text,
+    session_data,
+    alert_text,
+    selected_options,
+    user_id_for,
+    expense_rows,
+    expense_count,
+)
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
 TEMPLATE_PATH = PROJECT_ROOT / "templates" / "add_expense.html"
 CSS_PATH = PROJECT_ROOT / "static" / "css" / "add_expense.css"
 PROFILE_CSS_PATH = PROJECT_ROOT / "static" / "css" / "profile.css"
-DEMO = {"email": "demo@spendly.com", "password": "demo123"}
 SIGN_IN_MESSAGE = "Please sign in to add an expense."
-HEX_RE = re.compile(r"#[0-9a-fA-F]{3,8}\b")
 
 AMOUNT_REQUIRED = "Please enter an amount greater than zero."
 AMOUNT_MAX = "Amount must be at most ₹10,00,000."
@@ -34,65 +44,11 @@ MIN_DATE_ERR = "Date must be on or after 2000-01-01."
 # Helpers                                                             #
 # ------------------------------------------------------------------ #
 
-def _today():
-    return date.today().isoformat()
-
-
-def _login(client, **overrides):
-    return client.post("/login", data={**DEMO, **overrides})
-
-
-def _register_and_login(client, name, email, password="password123"):
-    client.post("/register", data={"name": name, "email": email, "password": password})
-    return _login(client, email=email, password=password)
-
-
-def _text(resp):
-    return html.unescape(resp.get_data(as_text=True))
-
-
-def _session(client):
-    with client.session_transaction() as sess:
-        return dict(sess)
-
-
-def _alert(body):
-    match = re.search(r'role="alert"[^>]*>\s*(.*?)\s*<', body, re.S)
-    return match.group(1) if match else None
-
-
-def _user_id(email):
-    return db_module.get_user_by_email(email)["id"]
-
-
-def _rows(user_id):
-    conn = db_module.get_db()
-    try:
-        return [
-            dict(r)
-            for r in conn.execute(
-                "SELECT id, user_id, amount, category, date, description "
-                "FROM expenses WHERE user_id = ? ORDER BY id",
-                (user_id,),
-            ).fetchall()
-        ]
-    finally:
-        conn.close()
-
-
-def _count():
-    conn = db_module.get_db()
-    try:
-        return conn.execute("SELECT COUNT(*) FROM expenses").fetchone()[0]
-    finally:
-        conn.close()
-
-
 def _valid(**overrides):
     data = {
         "amount": "450.50",
         "category": "Food",
-        "date": _today(),
+        "date": today_iso(),
         "description": "Dinner",
     }
     data.update(overrides)
@@ -105,10 +61,6 @@ def _post(client, follow_redirects=False, **overrides):
     )
 
 
-def _selected_options(body):
-    return re.findall(r'<option value="([^"]*)"[^>]*\sselected', body)
-
-
 # ------------------------------------------------------------------ #
 # Access control                                                      #
 # ------------------------------------------------------------------ #
@@ -117,15 +69,15 @@ def test_signed_out_get_redirects_with_flash(client):
     resp = client.get("/expenses/add")
     assert resp.status_code == 302
     assert resp.headers["Location"].endswith("/login")
-    assert SIGN_IN_MESSAGE in _text(client.get("/login"))
+    assert SIGN_IN_MESSAGE in page_text(client.get("/login"))
 
 
 def test_signed_out_post_inserts_nothing(client):
-    before = _count()
+    before = expense_count()
     resp = _post(client)
     assert resp.status_code == 302
     assert resp.headers["Location"].endswith("/login")
-    assert _count() == before
+    assert expense_count() == before
 
 
 @pytest.mark.parametrize("method", ["get", "post"])
@@ -133,12 +85,12 @@ def test_stale_session_cleared_and_redirected(client, method):
     with client.session_transaction() as sess:
         sess["user_id"] = 999_999
         sess["user_name"] = "Ghost"
-    before = _count()
+    before = expense_count()
     resp = getattr(client, method)("/expenses/add", data=_valid() if method == "post" else None)
     assert resp.status_code == 302
     assert resp.headers["Location"].endswith("/login")
-    assert "user_id" not in _session(client)
-    assert _count() == before
+    assert "user_id" not in session_data(client)
+    assert expense_count() == before
 
 
 # ------------------------------------------------------------------ #
@@ -146,7 +98,7 @@ def test_stale_session_cleared_and_redirected(client, method):
 # ------------------------------------------------------------------ #
 
 def test_get_renders_form(client):
-    _login(client)
+    login(client)
     resp = client.get("/expenses/add")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
@@ -161,7 +113,7 @@ def test_get_renders_form(client):
 
 
 def test_select_lists_all_categories(client):
-    _login(client)
+    login(client)
     body = client.get("/expenses/add").get_data(as_text=True)
     values = re.findall(r'<option value="([^"]*)"', body)
     assert values == [""] + db_module.CATEGORIES
@@ -169,10 +121,10 @@ def test_select_lists_all_categories(client):
 
 
 def test_date_prefilled_with_today(client):
-    _login(client)
+    login(client)
     body = client.get("/expenses/add").get_data(as_text=True)
-    assert f'max="{_today()}"' in body
-    assert f'value="{_today()}"' in body
+    assert f'max="{today_iso()}"' in body
+    assert f'value="{today_iso()}"' in body
 
 
 # ------------------------------------------------------------------ #
@@ -180,28 +132,28 @@ def test_date_prefilled_with_today(client):
 # ------------------------------------------------------------------ #
 
 def test_valid_post_inserts_and_redirects(client):
-    _login(client)
-    demo_id = _user_id(DEMO["email"])
-    before = len(_rows(demo_id))
+    login(client)
+    demo_id = user_id_for(DEMO["email"])
+    before = len(expense_rows(demo_id))
     resp = _post(client)
     assert resp.status_code == 302
     assert resp.headers["Location"].endswith("/profile")
 
-    rows = _rows(demo_id)
+    rows = expense_rows(demo_id)
     assert len(rows) == before + 1
     new = rows[-1]
     assert new["amount"] == pytest.approx(450.5)
     assert new["category"] == "Food"
-    assert new["date"] == _today()
+    assert new["date"] == today_iso()
     assert new["description"] == "Dinner"
 
-    assert "Expense added." in _text(client.get("/profile"))
+    assert "Expense added." in page_text(client.get("/profile"))
 
 
 def test_profile_reflects_new_expense(client):
-    _login(client)
+    login(client)
     _post(client)
-    body = _text(client.get("/profile"))
+    body = page_text(client.get("/profile"))
     assert "₹7,800.50" in body  # 7,350 seeded + 450.50
     assert re.search(r'stat-label">Transactions</span>\s*<span class="stat-value">9<', body)
     assert "Dinner" in body
@@ -209,24 +161,24 @@ def test_profile_reflects_new_expense(client):
 
 
 def test_empty_description_stored_null(client):
-    _login(client)
+    login(client)
     _post(client, description="   ")
-    row = _rows(_user_id(DEMO["email"]))[-1]
+    row = expense_rows(user_id_for(DEMO["email"]))[-1]
     assert row["description"] is None
-    assert "Expense added." in _text(client.get("/profile"))
+    assert "Expense added." in page_text(client.get("/profile"))
 
 
 def test_missing_description_field_ok(client):
-    _login(client)
+    login(client)
     resp = client.post("/expenses/add", data=_valid(description=None))
     assert resp.status_code == 302
-    assert _rows(_user_id(DEMO["email"]))[-1]["description"] is None
+    assert expense_rows(user_id_for(DEMO["email"]))[-1]["description"] is None
 
 
 def test_values_normalised(client):
-    _login(client)
+    login(client)
     _post(client, amount="  99.9 ", date="2026-1-5", description="  Tea  ")
-    row = _rows(_user_id(DEMO["email"]))[-1]
+    row = expense_rows(user_id_for(DEMO["email"]))[-1]
     assert row["amount"] == pytest.approx(99.9)
     assert row["date"] == "2026-01-05"
     assert row["description"] == "Tea"
@@ -234,13 +186,13 @@ def test_values_normalised(client):
 
 @pytest.mark.parametrize("amount", ["1000000", "0.01", "12.340", "5."])
 def test_boundary_amounts_accepted(client, amount):
-    _login(client)
+    login(client)
     assert _post(client, amount=amount).status_code == 302
 
 
 def test_boundary_description_and_today_accepted(client):
-    _login(client)
-    resp = _post(client, description="x" * 200, date=_today())
+    login(client)
+    resp = _post(client, description="x" * 200, date=today_iso())
     assert resp.status_code == 302
 
 
@@ -279,38 +231,38 @@ INVALID_CASES = [
 
 @pytest.mark.parametrize("overrides, error", INVALID_CASES)
 def test_invalid_input_rerenders_with_error(client, overrides, error):
-    _login(client)
-    before = _count()
+    login(client)
+    before = expense_count()
     resp = _post(client, **overrides)
     assert resp.status_code == 200
-    assert _alert(_text(resp)) == error
-    assert _count() == before
+    assert alert_text(page_text(resp)) == error
+    assert expense_count() == before
 
 
 def test_future_date_rejected(client):
-    _login(client)
-    before = _count()
+    login(client)
+    before = expense_count()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
     resp = _post(client, date=tomorrow)
     assert resp.status_code == 200
-    assert _alert(_text(resp)) == FUTURE_ERR
-    assert _count() == before
+    assert alert_text(page_text(resp)) == FUTURE_ERR
+    assert expense_count() == before
 
 
 def test_preserves_values_on_error(client):
-    _login(client)
+    login(client)
     resp = _post(client, amount="12.345", category="Health", date="2026-03-01", description="Dentist")
     body = resp.get_data(as_text=True)
     assert 'value="12.345"' in body
-    assert _selected_options(body) == ["Health"]
+    assert selected_options(body) == ["Health"]
     assert 'value="2026-03-01"' in body
     assert 'value="Dentist"' in body
 
 
 def test_invalid_category_keeps_placeholder_selected(client):
-    _login(client)
+    login(client)
     body = _post(client, category="Crypto").get_data(as_text=True)
-    assert _selected_options(body) == [""]
+    assert selected_options(body) == [""]
 
 
 def _form(**overrides):
@@ -361,44 +313,44 @@ def test_parse_amount_rejects_overlong_input():
 # ------------------------------------------------------------------ #
 
 def test_form_user_id_ignored(client):
-    demo_id = _user_id(DEMO["email"])
-    demo_before = len(_rows(demo_id))
-    _register_and_login(client, "Bea Lane", "bea@example.com")
-    bea_id = _user_id("bea@example.com")
+    demo_id = user_id_for(DEMO["email"])
+    demo_before = len(expense_rows(demo_id))
+    register_and_login(client, "Bea Lane", "bea@example.com")
+    bea_id = user_id_for("bea@example.com")
     client.post("/expenses/add", data={**_valid(), "user_id": str(demo_id)})
-    assert len(_rows(demo_id)) == demo_before
-    assert len(_rows(bea_id)) == 1
+    assert len(expense_rows(demo_id)) == demo_before
+    assert len(expense_rows(bea_id)) == 1
 
 
 def test_script_description_escaped(client):
-    _login(client)
+    login(client)
     payload = "<script>alert(1)</script>"
     _post(client, description=payload)
-    assert _rows(_user_id(DEMO["email"]))[-1]["description"] == payload
+    assert expense_rows(user_id_for(DEMO["email"]))[-1]["description"] == payload
     raw = client.get("/profile").get_data(as_text=True)
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in raw
     assert payload not in raw
 
 
 def test_script_in_rerendered_form_escaped(client):
-    _login(client)
+    login(client)
     payload = '"><script>alert(1)</script>'
     raw = _post(client, amount="", description=payload).get_data(as_text=True)
     assert "<script>alert(1)</script>" not in raw
 
 
 def test_oversized_body_rejected(client):
-    _login(client)
-    before = _count()
+    login(client)
+    before = expense_count()
     resp = _post(client, description="x" * (20 * 1024))
     assert resp.status_code == 413
-    assert _count() == before
+    assert expense_count() == before
 
 
 def test_unicode_description_accepted(client):
-    _login(client)
+    login(client)
     _post(client, description="Chai ☕ — ₹ café")
-    assert _rows(_user_id(DEMO["email"]))[-1]["description"] == "Chai ☕ — ₹ café"
+    assert expense_rows(user_id_for(DEMO["email"]))[-1]["description"] == "Chai ☕ — ₹ café"
 
 
 def test_session_cookie_samesite_lax(app):
@@ -406,12 +358,12 @@ def test_session_cookie_samesite_lax(app):
 
 
 def test_sql_injection_description_literal(client):
-    _login(client)
+    login(client)
     payload = "'); DROP TABLE expenses;--"
-    before = _count()
+    before = expense_count()
     _post(client, description=payload)
-    assert _count() == before + 1
-    assert _rows(_user_id(DEMO["email"]))[-1]["description"] == payload
+    assert expense_count() == before + 1
+    assert expense_rows(user_id_for(DEMO["email"]))[-1]["description"] == payload
 
 
 # ------------------------------------------------------------------ #
@@ -419,9 +371,9 @@ def test_sql_injection_description_literal(client):
 # ------------------------------------------------------------------ #
 
 def test_create_expense_returns_id(app):
-    demo_id = _user_id(DEMO["email"])
+    demo_id = user_id_for(DEMO["email"])
     new_id = db_module.create_expense(demo_id, 12.5, "Transport", "2026-01-02", "Bus")
-    row = _rows(demo_id)[-1]
+    row = expense_rows(demo_id)[-1]
     assert row == {
         "id": new_id,
         "user_id": demo_id,
@@ -433,9 +385,9 @@ def test_create_expense_returns_id(app):
 
 
 def test_create_expense_description_defaults_to_null(app):
-    demo_id = _user_id(DEMO["email"])
+    demo_id = user_id_for(DEMO["email"])
     db_module.create_expense(demo_id, 1.0, "Other", "2026-01-02")
-    assert _rows(demo_id)[-1]["description"] is None
+    assert expense_rows(demo_id)[-1]["description"] is None
 
 
 def test_create_expense_unknown_user_raises(app):
@@ -448,20 +400,20 @@ def test_create_expense_unknown_user_raises(app):
 # ------------------------------------------------------------------ #
 
 def test_profile_has_add_expense_link(client):
-    _login(client)
+    login(client)
     body = client.get("/profile").get_data(as_text=True)
     assert re.search(r'<a href="/expenses/add"[^>]*>Add expense</a>', body)
 
 
 def test_empty_state_links_to_add(client):
-    _register_and_login(client, "New Person", "new@example.com")
+    register_and_login(client, "New Person", "new@example.com")
     body = client.get("/profile").get_data(as_text=True)
     assert "No transactions yet." in body
     assert re.search(r'class="profile-empty">No transactions yet\.\s*<a href="/expenses/add"', body)
 
 
 def test_filtered_empty_state_has_no_add_link(client):
-    _register_and_login(client, "New Person", "new@example.com")
+    register_and_login(client, "New Person", "new@example.com")
     body = client.get("/profile?start_date=2020-01-01&end_date=2020-01-31").get_data(as_text=True)
     assert '<p class="profile-empty">No transactions in this period.</p>' in body
 
@@ -490,12 +442,16 @@ def test_css_no_hex_and_mobile_rules():
     assert "flex-direction: column" in mobile
 
 
-def test_edit_delete_stubs_unchanged(client):
-    assert client.get("/expenses/1/edit").get_data(as_text=True) == "Edit expense — coming in Step 8"
+def test_delete_stub_unchanged_and_edit_implemented(client):
     assert client.get("/expenses/1/delete").get_data(as_text=True) == "Delete expense — coming in Step 9"
+    # Edit was a stub until Step 8; signed out it now redirects to /login.
+    resp = client.get("/expenses/1/edit")
+    assert resp.status_code == 302
+    assert resp.headers["Location"].endswith("/login")
+    assert "coming in Step 8" not in resp.get_data(as_text=True)
 
 
 def test_add_stub_removed(client):
-    _login(client)
+    login(client)
     assert "coming in Step 7" not in client.get("/expenses/add").get_data(as_text=True)
 

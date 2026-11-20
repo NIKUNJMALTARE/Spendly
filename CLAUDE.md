@@ -14,6 +14,7 @@ spendly/
 │   └── db.py           # SQLite helpers: get_db(), init_db(), seed_db(), user + expense helpers
 ├── templates/
 │   ├── base.html       # Shared layout — all templates must extend this
+│   ├── _expense_form.html  # Shared form partial (add + edit expense); not a page
 │   └── *.html          # One template per page
 ├── static/
 │   ├── css/
@@ -73,8 +74,8 @@ python -m venv venv
 source venv/bin/activate          # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-# Run dev server (port 5001)
-python app.py
+# Run dev server (port 5001); FLASK_DEBUG=1 turns on the debugger + reloader
+FLASK_DEBUG=1 python app.py
 
 # Run all tests
 pytest
@@ -102,7 +103,7 @@ pytest -s
 | `GET /profile` | Implemented (Step 4 design, Step 5 real data) — signed-in only (signed-out users are flashed and redirected to `/login`); real user card, stats/recent transactions/category breakdown from the user's own expenses; Step 6 date filter via `?start_date=&end_date=` (`YYYY-MM-DD`, inclusive, either optional; presets This month / Last 30 days / All time; invalid or reversed dates fall back to all time with an inline error) |
 | `GET /analytics` | Implemented — signed-in only "Coming Soon" page (`analytics.html` + `analytics.css`, from Figma); signed-out or stale sessions are flashed and redirected to `/login`; navbar link shown only when signed in, highlighted with `is-active` + `aria-current` on this page |
 | `GET/POST /expenses/add` | Implemented (Step 7) — signed-in only (signed-out or stale sessions are flashed and redirected to `/login`); form (amount, category, date, optional description) validated by `_validate_expense()`; on success inserts via `create_expense()`, flashes "Expense added." and redirects to `/profile`; invalid input re-renders (200) with an inline error and the submitted values |
-| `GET /expenses/<id>/edit` | Stub — Step 8 |
+| `GET/POST /expenses/<id>/edit` | Implemented (Step 8) — signed-in owner only (signed-out or stale sessions are flashed and redirected to `/login`); a missing id or another user's expense is `abort(404)` either way; GET pre-fills `edit_expense.html` (reuses `add_expense.css`) from `get_expense_by_id()`; POST validates with the shared `_validate_expense()`, saves via `update_expense()`, flashes "Expense updated." and redirects to `/profile`; invalid input re-renders (200) with the submitted values. Profile's recent-transactions table has a per-row Edit link |
 | `GET /expenses/<id>/delete` | Stub — Step 9 |
 
 **Do not implement a stub route unless the active task explicitly targets that step.**
@@ -119,9 +120,15 @@ pytest -s
 - **`database/db.py` implements `get_db()`, `init_db()`, `seed_db()`** (Step 1) — `get_db()` returns a new connection per call; the caller must close it. DB file is `expense_tracker.db` in the project root (override with `SPENDLY_DB_PATH`).
   - User helpers: `get_user_by_email()`, `create_user()` (Step 2), `verify_user()` (Step 3), `get_user_by_id()` (Step 4)
   - Expense helpers: `get_expense_stats()`, `get_recent_expenses()`, `get_category_breakdown()` (Step 5)
-  - `create_expense()` (Step 7) — parameterised insert, returns the new id; raises `sqlite3.IntegrityError` for an unknown user
   - All three read helpers take optional `start_date=None, end_date=None` (inclusive ISO bounds, Step 6), built by `_date_range_clause()`
+  - `create_expense()` (Step 7) — parameterised insert, returns the new id; raises `sqlite3.IntegrityError` for an unknown user
+  - `get_expense_by_id(expense_id, user_id)` (Step 8) — returns a dict only if the expense belongs to that user, else `None`
+  - `update_expense(expense_id, user_id, …)` (Step 8) — `UPDATE … WHERE id = ? AND user_id = ?`; returns `True` only if one row changed. Ownership is enforced in SQL, not just the route
+  - `get_recent_expenses()` rows include `id` (Step 8) so the profile can link to edit
 - **FK enforcement is manual** — SQLite foreign keys are off by default; `get_db()` must run `PRAGMA foreign_keys = ON` on every connection
 - **No CSRF tokens** on POST forms yet — a known gap (would need a new package); partly mitigated by `SESSION_COOKIE_SAMESITE="Lax"`. Request bodies are capped by `MAX_CONTENT_LENGTH` (16 KB → 413)
 - **Signed-in routes use `_require_user(message)`** in `app.py` — returns `(user, None)` or `(None, redirect)`; reuse it rather than re-copying the session checks
 - The app runs on **port 5001**, not the Flask default 5000 — don't change this
+- **Secret key and debug:** `SPENDLY_SECRET_KEY` sets the session key; without it a random per-process key is used (sessions reset on restart) — never reintroduce a hardcoded fallback. The debugger is off unless `FLASK_DEBUG=1`
+- **State-changing routes must be POST** — Step 9's delete must not be a GET link, or it bypasses the `SameSite=Lax` CSRF mitigation
+- **Shared test helpers** live in `tests/helpers.py` (`login`, `page_text`, `alert_text`, `expense_rows`, …) — import them in new test files instead of copying

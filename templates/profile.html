@@ -103,6 +103,7 @@
                                 <th scope="col">Description</th>
                                 <th scope="col">Category</th>
                                 <th scope="col" class="num">Amount</th>
+                                <th scope="col"><span class="visually-hidden">Actions</span></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -112,6 +113,7 @@
                                 <td>{{ txn.description or "—" }}</td>
                                 <td class="nowrap"><span class="category-pill">{{ txn.category }}</span></td>
                                 <td class="num nowrap">{{ txn.amount|inr }}</td>
+                                <td class="nowrap"><a href="{{ url_for('edit_expense', id=txn.id) }}" class="txn-edit-link" aria-label="Edit {{ txn.description or txn.category }} on {{ txn.date }}">Edit</a></td>
                             </tr>
                             {% endfor %}
                         </tbody>

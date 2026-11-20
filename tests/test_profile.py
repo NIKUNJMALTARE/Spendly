@@ -228,7 +228,9 @@ def test_transactions_table(client):
     _login(client)
     body = _text(client.get("/profile"))
     headers = re.findall(r'<th scope="col"[^>]*>(.*?)</th>', body)
-    assert headers == ["Date", "Description", "Category", "Amount"]
+    assert headers[:4] == ["Date", "Description", "Category", "Amount"]
+    assert len(headers) == 5
+    assert 'class="visually-hidden">Actions<' in headers[4]
     tbody = _tbody(body)
     assert tbody.count("<tr>") == 5
     assert _descriptions(tbody) == RECENT_FIVE
