@@ -290,6 +290,25 @@ def update_expense(
         conn.close()
 
 
+def delete_expense_by_id(expense_id, user_id):
+    """Delete one of user_id's expenses; return True if exactly one row went.
+
+    Ownership is enforced in the WHERE clause, so a wrong user or a missing
+    id deletes nothing and returns False. Nothing references expenses.id,
+    so no cascade is needed.
+    """
+    conn = get_db()
+    try:
+        with conn:
+            cursor = conn.execute(
+                "DELETE FROM expenses WHERE id = ? AND user_id = ?",
+                (expense_id, user_id),
+            )
+        return cursor.rowcount == 1
+    finally:
+        conn.close()
+
+
 def init_db():
     """Create all tables if they don't exist. Safe to call repeatedly."""
     conn = get_db()

@@ -113,7 +113,11 @@
                                 <td>{{ txn.description or "—" }}</td>
                                 <td class="nowrap"><span class="category-pill">{{ txn.category }}</span></td>
                                 <td class="num nowrap">{{ txn.amount|inr }}</td>
-                                <td class="nowrap"><a href="{{ url_for('edit_expense', id=txn.id) }}" class="txn-edit-link" aria-label="Edit {{ txn.description or txn.category }} on {{ txn.date }}">Edit</a></td>
+                                {% set row_label = (txn.description or txn.category) ~ " on " ~ txn.date %}
+                                <td class="nowrap">
+                                    <a href="{{ url_for('edit_expense', id=txn.id) }}" class="txn-edit-link" aria-label="Edit {{ row_label }}">Edit</a>
+                                    <a href="{{ url_for('delete_expense', id=txn.id) }}" class="txn-delete-link" aria-label="Delete {{ row_label }}">Delete</a>
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>

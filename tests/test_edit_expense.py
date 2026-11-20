@@ -577,7 +577,10 @@ def test_shared_form_partial_rules():
         assert rule not in source
 
 
-def test_delete_stub_unchanged(client):
+def test_delete_route_implemented(client):
+    # Delete was a stub until Step 9; signed out it now redirects to /login.
     resp = client.get("/expenses/1/delete")
-    assert resp.get_data(as_text=True) == "Delete expense — coming in Step 9"
+    assert resp.status_code == 302
+    assert resp.headers["Location"].endswith("/login")
+    assert "coming in Step 9" not in resp.get_data(as_text=True)
 

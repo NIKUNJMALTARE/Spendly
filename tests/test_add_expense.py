@@ -442,13 +442,14 @@ def test_css_no_hex_and_mobile_rules():
     assert "flex-direction: column" in mobile
 
 
-def test_delete_stub_unchanged_and_edit_implemented(client):
-    assert client.get("/expenses/1/delete").get_data(as_text=True) == "Delete expense — coming in Step 9"
-    # Edit was a stub until Step 8; signed out it now redirects to /login.
-    resp = client.get("/expenses/1/edit")
-    assert resp.status_code == 302
-    assert resp.headers["Location"].endswith("/login")
-    assert "coming in Step 8" not in resp.get_data(as_text=True)
+def test_edit_and_delete_implemented(client):
+    # Edit and delete were stubs until Steps 8 and 9; signed out both now
+    # redirect to /login.
+    for url, stub in (("/expenses/1/edit", "Step 8"), ("/expenses/1/delete", "Step 9")):
+        resp = client.get(url)
+        assert resp.status_code == 302
+        assert resp.headers["Location"].endswith("/login")
+        assert f"coming in {stub}" not in resp.get_data(as_text=True)
 
 
 def test_add_stub_removed(client):
