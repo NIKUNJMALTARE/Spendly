@@ -60,7 +60,7 @@ def test_demo_recent_expenses(demo_id):
         "Pharmacy",
     ]
     for row in recent:
-        assert set(row.keys()) == {"date", "description", "category", "amount"}
+        assert set(row.keys()) == {"id", "date", "description", "category", "amount"}
     assert recent[0]["amount"] == pytest.approx(1400.0)
     dates = [r["date"] for r in recent]
     assert dates == sorted(dates, reverse=True)

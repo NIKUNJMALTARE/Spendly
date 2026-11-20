@@ -144,7 +144,7 @@ def get_recent_expenses(user_id, limit=5, start_date=None, end_date=None):
     conn = get_db()
     try:
         rows = conn.execute(
-            "SELECT date, COALESCE(description, '') AS description, "
+            "SELECT id, date, COALESCE(description, '') AS description, "
             "category, amount "
             "FROM expenses " + where + " "
             "ORDER BY date DESC, id DESC "
@@ -246,6 +246,46 @@ def create_expense(user_id, amount, category, expense_date, description=None):
                 (user_id, amount, category, expense_date, description),
             )
         return cursor.lastrowid
+    finally:
+        conn.close()
+
+
+def get_expense_by_id(expense_id, user_id):
+    """Return one expense as a dict if it belongs to user_id, else None.
+
+    A missing id and another user's id look the same to the caller.
+    """
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT id, user_id, amount, category, date, description "
+            "FROM expenses WHERE id = ? AND user_id = ?",
+            (expense_id, user_id),
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def update_expense(
+    expense_id, user_id, amount, category, expense_date, description=None
+):
+    """Update one of user_id's expenses; return True if exactly one row changed.
+
+    Ownership is enforced in the WHERE clause, so a wrong user or a missing
+    id changes nothing and returns False. user_id and created_at are never
+    written.
+    """
+    conn = get_db()
+    try:
+        with conn:
+            cursor = conn.execute(
+                "UPDATE expenses "
+                "SET amount = ?, category = ?, date = ?, description = ? "
+                "WHERE id = ? AND user_id = ?",
+                (amount, category, expense_date, description, expense_id, user_id),
+            )
+        return cursor.rowcount == 1
     finally:
         conn.close()
 

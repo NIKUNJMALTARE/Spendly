@@ -1,10 +1,20 @@
 import os
 import re
+import secrets
 import sqlite3
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
-from flask import Flask, flash, redirect, render_template, request, session, url_for
+from flask import (
+    Flask,
+    abort,
+    flash,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 
 from database.db import (
     CATEGORIES,
@@ -12,17 +22,21 @@ from database.db import (
     create_user,
     get_category_breakdown,
     get_db,
+    get_expense_by_id,
     get_expense_stats,
     get_recent_expenses,
     get_user_by_email,
     get_user_by_id,
     init_db,
     seed_db,
+    update_expense,
     verify_user,
 )
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SPENDLY_SECRET_KEY", "dev-only-insecure-key")
+# Without SPENDLY_SECRET_KEY, use a random per-process key: sessions don't
+# survive a restart, but there is no well-known key to forge sessions with.
+app.secret_key = os.environ.get("SPENDLY_SECRET_KEY") or secrets.token_hex(32)
 app.config.update(
     MAX_CONTENT_LENGTH=16 * 1024,  # every form here is tiny; larger bodies get a 413
     SESSION_COOKIE_SAMESITE="Lax",  # partial CSRF mitigation until real tokens exist
@@ -50,6 +64,8 @@ LAST_N_DAYS = 30  # "Last 30 days" preset, counting today
 
 ADD_EXPENSE_SIGN_IN_MESSAGE = "Please sign in to add an expense."
 EXPENSE_ADDED_MESSAGE = "Expense added."
+EDIT_EXPENSE_SIGN_IN_MESSAGE = "Please sign in to edit an expense."
+EXPENSE_UPDATED_MESSAGE = "Expense updated."
 MAX_EXPENSE_AMOUNT = Decimal("1000000")
 MAX_AMOUNT_INPUT_LENGTH = 20  # longer than any valid amount; checked before the regex
 MAX_DESCRIPTION_LENGTH = 200
@@ -194,6 +210,35 @@ def _require_user(message):
         flash(message, "error")  # after clear(), or it is wiped
         return None, redirect(url_for("login"))
     return user, None
+
+
+def _expense_form_context():
+    """Template context shared by the add and edit expense forms."""
+    return {
+        "categories": CATEGORIES,
+        "today": date.today().isoformat(),
+        "max_description_length": MAX_DESCRIPTION_LENGTH,
+    }
+
+
+def _blank_expense_form(today):
+    """Empty add-expense form, with the date defaulting to today."""
+    return {"amount": "", "category": "", "date": today, "description": ""}
+
+
+def _form_from_expense(expense):
+    """Edit-form values from a stored expense row (amount as plain 2-dp text)."""
+    return {
+        "amount": f"{expense['amount']:.2f}",
+        "category": expense["category"],
+        "date": expense["date"],
+        "description": expense["description"] or "",
+    }
+
+
+def _expense_form_from_request():
+    """Return the expense form fields from the POST body, each stripped."""
+    return {field: request.form.get(field, "").strip() for field in EXPENSE_FIELDS}
 
 
 def _parse_date_filter(args):
@@ -353,24 +398,20 @@ def add_expense():
     if login_redirect:
         return login_redirect
 
-    today = date.today().isoformat()
-    template_args = {
-        "categories": CATEGORIES,
-        "today": today,
-        "max_description_length": MAX_DESCRIPTION_LENGTH,
-    }
+    template_args = _expense_form_context()
     if request.method == "GET":
-        form = {"amount": "", "category": "", "date": today, "description": ""}
+        form = _blank_expense_form(template_args["today"])
         return render_template("add_expense.html", form=form, **template_args)
 
-    form = {field: request.form.get(field, "").strip() for field in EXPENSE_FIELDS}
+    form = _expense_form_from_request()
     cleaned, error = _validate_expense(form)
     if error:
         return render_template(
             "add_expense.html", form=form, error=error, **template_args
         )
 
-    create_expense(  # user id from the session only; any form user_id is ignored
+    # The user id comes from the session only; any form user_id is ignored.
+    create_expense(
         user["id"],
         amount=cleaned["amount"],
         category=cleaned["category"],
@@ -378,6 +419,44 @@ def add_expense():
         description=cleaned["description"],
     )
     flash(EXPENSE_ADDED_MESSAGE, "success")
+    return redirect(url_for("profile"))
+
+
+@app.route("/expenses/<int:id>/edit", methods=["GET", "POST"])
+def edit_expense(id):
+    user, login_redirect = _require_user(EDIT_EXPENSE_SIGN_IN_MESSAGE)
+    if login_redirect:
+        return login_redirect
+
+    # Missing and foreign ids both 404, so ids can't be probed for existence.
+    expense = get_expense_by_id(id, user["id"])
+    if expense is None:
+        abort(404)
+
+    template_args = {**_expense_form_context(), "expense_id": id}
+    if request.method == "GET":
+        form = _form_from_expense(expense)
+        return render_template("edit_expense.html", form=form, **template_args)
+
+    form = _expense_form_from_request()  # submitted values, never the stored row
+    cleaned, error = _validate_expense(form)
+    if error:
+        return render_template(
+            "edit_expense.html", form=form, error=error, **template_args
+        )
+
+    # The expense id comes from the URL and the user id from the session only.
+    updated = update_expense(
+        id,
+        user["id"],
+        amount=cleaned["amount"],
+        category=cleaned["category"],
+        expense_date=cleaned["expense_date"],
+        description=cleaned["description"],
+    )
+    if not updated:  # deleted between load and save
+        abort(404)
+    flash(EXPENSE_UPDATED_MESSAGE, "success")
     return redirect(url_for("profile"))
 
 
@@ -395,15 +474,11 @@ def privacy():
 # Placeholder routes — students will implement these                  #
 # ------------------------------------------------------------------ #
 
-@app.route("/expenses/<int:id>/edit")
-def edit_expense(id):
-    return "Edit expense — coming in Step 8"
-
-
 @app.route("/expenses/<int:id>/delete")
 def delete_expense(id):
     return "Delete expense — coming in Step 9"
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5001)
+    # The Werkzeug debugger can run arbitrary code; opt in with FLASK_DEBUG=1.
+    app.run(debug=os.environ.get("FLASK_DEBUG") == "1", port=5001)

@@ -1,0 +1,55 @@
+{# Shared expense form, included by add_expense.html and edit_expense.html.
+   Not a page: it doesn't extend base.html. Expects form, categories, today,
+   max_description_length and error from the view, plus form_action and
+   submit_label set by the including template. #}
+{% if error %}
+<div class="auth-error" role="alert">{{ error }}</div>
+{% endif %}
+
+<form method="post" action="{{ form_action }}" novalidate>
+    <div class="form-group">
+        <label for="amount">Amount</label>
+        <div class="amount-field">
+            <span class="amount-prefix" aria-hidden="true">₹</span>
+            <input type="number" id="amount" name="amount"
+                   class="form-input amount-input"
+                   step="0.01" min="0.01" inputmode="decimal"
+                   placeholder="0.00"
+                   value="{{ form.amount }}"
+                   required autofocus>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label for="category">Category</label>
+        <select id="category" name="category" class="form-input form-select" required>
+            <option value="" disabled{% if form.category not in categories %} selected{% endif %}>Choose a category</option>
+            {% for category in categories %}
+            <option value="{{ category }}"{% if form.category == category %} selected{% endif %}>{{ category }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="date">Date</label>
+        <input type="date" id="date" name="date"
+               class="form-input"
+               max="{{ today }}"
+               value="{{ form.date }}"
+               required>
+    </div>
+
+    <div class="form-group">
+        <label for="description">Description <span class="form-optional">(optional)</span></label>
+        <input type="text" id="description" name="description"
+               class="form-input"
+               maxlength="{{ max_description_length }}"
+               placeholder="e.g. Dinner with friends"
+               value="{{ form.description }}">
+    </div>
+
+    <div class="form-actions">
+        <button type="submit" class="btn-submit">{{ submit_label }}</button>
+        <a href="{{ url_for('profile') }}" class="btn-ghost">Cancel</a>
+    </div>
+</form>

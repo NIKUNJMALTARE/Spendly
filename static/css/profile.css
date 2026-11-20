@@ -148,7 +148,7 @@
 
 .txn-table {
     width: 100%;
-    min-width: 32rem;
+    min-width: 36rem;  /* room for the Edit column; scrolls inside .table-scroll */
     border-collapse: collapse;
     font-size: 0.9rem;
 }
@@ -181,6 +181,22 @@
 
 .txn-table .nowrap {
     white-space: nowrap;
+}
+
+.txn-edit-link {
+    color: var(--accent);
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.txn-edit-link:hover {
+    text-decoration: underline;
+}
+
+.txn-edit-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
 }
 
 .category-pill {
