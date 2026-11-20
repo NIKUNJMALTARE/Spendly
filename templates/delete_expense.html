@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Delete expense — Spendly{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/add_expense.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<section class="auth-section expense-section">
+    <div class="auth-container">
+
+        <div class="auth-header">
+            <h1 class="auth-title">Delete expense</h1>
+            <p class="auth-subtitle">This can't be undone.</p>
+        </div>
+
+        <div class="auth-card expense-card">
+            <dl class="expense-summary">
+                <div class="expense-summary-row">
+                    <dt>Amount</dt>
+                    <dd class="expense-summary-amount">{{ expense.amount|inr }}</dd>
+                </div>
+                <div class="expense-summary-row">
+                    <dt>Category</dt>
+                    <dd>{{ expense.category }}</dd>
+                </div>
+                <div class="expense-summary-row">
+                    <dt>Date</dt>
+                    {# short_date returns None for a malformed stored date; show it raw then #}
+                    <dd><time datetime="{{ expense.date }}">{{ expense.date|short_date or expense.date }}</time></dd>
+                </div>
+                <div class="expense-summary-row">
+                    <dt>Description</dt>
+                    {% if expense.description %}
+                    <dd>{{ expense.description }}</dd>
+                    {% else %}
+                    <dd class="expense-summary-empty">No description</dd>
+                    {% endif %}
+                </div>
+            </dl>
+
+            <form method="post" action="{{ url_for('delete_expense', id=expense.id) }}" class="form-actions">
+                <button type="submit" class="btn-submit btn-danger">Delete expense</button>
+                <a href="{{ url_for('profile') }}" class="btn-ghost">Cancel</a>
+            </form>
+        </div>
+
+    </div>
+</section>
+
+{% endblock %}

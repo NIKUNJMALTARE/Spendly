@@ -148,7 +148,7 @@
 
 .txn-table {
     width: 100%;
-    min-width: 36rem;  /* room for the Edit column; scrolls inside .table-scroll */
+    min-width: 40rem;  /* room for the Edit + Delete actions; scrolls inside .table-scroll */
     border-collapse: collapse;
     font-size: 0.9rem;
 }
@@ -183,20 +183,32 @@
     white-space: nowrap;
 }
 
-.txn-edit-link {
-    color: var(--accent);
+/* Row actions: shared look, each link sets its own colour */
+.txn-edit-link,
+.txn-delete-link {
     font-size: 0.85rem;
     font-weight: 500;
 }
 
-.txn-edit-link:hover {
+.txn-edit-link:hover,
+.txn-delete-link:hover {
     text-decoration: underline;
 }
 
-.txn-edit-link:focus-visible {
-    outline: 2px solid var(--accent);
+.txn-edit-link:focus-visible,
+.txn-delete-link:focus-visible {
+    outline: 2px solid currentColor;
     outline-offset: 2px;
     border-radius: var(--radius-sm);
+}
+
+.txn-edit-link {
+    color: var(--accent);
+}
+
+.txn-delete-link {
+    margin-left: 0.5rem;  /* plus the inline space between the two links */
+    color: var(--danger);
 }
 
 .category-pill {

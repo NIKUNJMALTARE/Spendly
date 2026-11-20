@@ -20,6 +20,7 @@ from database.db import (
     CATEGORIES,
     create_expense,
     create_user,
+    delete_expense_by_id,
     get_category_breakdown,
     get_db,
     get_expense_by_id,
@@ -66,11 +67,16 @@ ADD_EXPENSE_SIGN_IN_MESSAGE = "Please sign in to add an expense."
 EXPENSE_ADDED_MESSAGE = "Expense added."
 EDIT_EXPENSE_SIGN_IN_MESSAGE = "Please sign in to edit an expense."
 EXPENSE_UPDATED_MESSAGE = "Expense updated."
+DELETE_EXPENSE_SIGN_IN_MESSAGE = "Please sign in to delete an expense."
+EXPENSE_DELETED_MESSAGE = "Expense deleted."
 MAX_EXPENSE_AMOUNT = Decimal("1000000")
 MAX_AMOUNT_INPUT_LENGTH = 20  # longer than any valid amount; checked before the regex
 MAX_DESCRIPTION_LENGTH = 200
 MIN_EXPENSE_DATE = date(2000, 1, 1)
 CENTS = Decimal("0.01")
+# Largest id SQLite can bind; bigger URL ids 404 at routing instead of
+# raising OverflowError (a 500) in the DB helpers.
+MAX_EXPENSE_ID = 2**63 - 1
 # Plain decimals only, e.g. "450", "450.5", ".5". Rejects "-5", "1e2", "nan",
 # "inf", "1_000" and non-ASCII digits.
 AMOUNT_RE = re.compile(r"[0-9]+(?:\.[0-9]*)?|\.[0-9]+")
@@ -422,7 +428,7 @@ def add_expense():
     return redirect(url_for("profile"))
 
 
-@app.route("/expenses/<int:id>/edit", methods=["GET", "POST"])
+@app.route(f"/expenses/<int(max={MAX_EXPENSE_ID}):id>/edit", methods=["GET", "POST"])
 def edit_expense(id):
     user, login_redirect = _require_user(EDIT_EXPENSE_SIGN_IN_MESSAGE)
     if login_redirect:
@@ -460,6 +466,26 @@ def edit_expense(id):
     return redirect(url_for("profile"))
 
 
+@app.route(f"/expenses/<int(max={MAX_EXPENSE_ID}):id>/delete", methods=["GET", "POST"])
+def delete_expense(id):
+    user, login_redirect = _require_user(DELETE_EXPENSE_SIGN_IN_MESSAGE)
+    if login_redirect:
+        return login_redirect
+
+    # Missing and foreign ids both 404, so ids can't be probed for existence.
+    expense = get_expense_by_id(id, user["id"])
+    if expense is None:
+        abort(404)
+
+    if request.method == "GET":  # confirmation page only; never changes the DB
+        return render_template("delete_expense.html", expense=expense)
+
+    if not delete_expense_by_id(id, user["id"]):  # already gone (e.g. double-submit)
+        abort(404)
+    flash(EXPENSE_DELETED_MESSAGE, "success")
+    return redirect(url_for("profile"))
+
+
 @app.route("/terms")
 def terms():
     return render_template("terms.html")
@@ -468,15 +494,6 @@ def terms():
 @app.route("/privacy")
 def privacy():
     return render_template("privacy.html")
-
-
-# ------------------------------------------------------------------ #
-# Placeholder routes — students will implement these                  #
-# ------------------------------------------------------------------ #
-
-@app.route("/expenses/<int:id>/delete")
-def delete_expense(id):
-    return "Delete expense — coming in Step 9"
 
 
 if __name__ == "__main__":
